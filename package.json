@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:db": "node scripts/test-db.mjs",
     "test:e2e": "playwright test --trace off",
-    "seed:generate": "vite-node scripts/generate-seed.ts"
+    "seed:generate": "vite-node scripts/generate-seed.ts",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -31,7 +31,7 @@ type View =
 export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string | null; onClose: () => void }) {
   const { invoices, today } = useInvoices();
   const invoice = invoices.find((i) => i.id === invoiceId) ?? null;
-  const history = useActivity({ invoiceId: invoiceId ?? undefined, limit: 50 });
+  const history = useActivity({ invoiceId: invoiceId ?? undefined, limit: 50, enabled: !!invoiceId });
   const { user } = useAuth();
   const role = user?.role;
   const m = useInvoiceMutations();

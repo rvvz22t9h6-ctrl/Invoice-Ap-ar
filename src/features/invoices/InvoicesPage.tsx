@@ -7,7 +7,7 @@
  *   - 欄位排序、分頁、合計列
  *   - 匯出 CSV（匯出「目前篩選後」的資料）
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ApprovalBadge, Button, Card, FilterSelect, PageHeader, Spinner, StatusBadge } from '@/components/ui';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -36,18 +36,21 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  // 篩選條件存在網址參數中，方便分享連結或重新整理後保留
-  const q = params.get('q') ?? '';
-  const party = params.get('party') ?? '';
-  const status = params.get('status') ?? '';
-  const approval = params.get('approval') ?? '';
-  const from = params.get('from') ?? '';
-  const to = params.get('to') ?? '';
-  const setParam = (key: string, value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value); else next.delete(key);
-    setParams(next, { replace: true });
-  };
+  // 篩選條件以 React state 為準（同步更新，連續快速操作也不會遺失），
+  // 並同步寫回網址參數，方便分享連結或重新整理後保留。
+  const FILTER_KEYS = ['q', 'party', 'status', 'approval', 'from', 'to'] as const;
+  type FilterKey = (typeof FILTER_KEYS)[number];
+  const [filters, setFilters] = useState<Record<FilterKey, string>>(() =>
+    Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<FilterKey, string>);
+  const { q, party, status, approval, from, to } = filters;
+  const setParam = (key: FilterKey, value: string) => setFilters((f) => ({ ...f, [key]: value }));
+  const clearFilters = () => setFilters(Object.fromEntries(FILTER_KEYS.map((k) => [k, ''])) as Record<FilterKey, string>);
+  useEffect(() => {
+    const next = new URLSearchParams();
+    FILTER_KEYS.forEach((k) => { if (filters[k]) next.set(k, filters[k]); });
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在篩選條件改變時寫回網址
+  }, [filters]);
   const hasFilters = !!(q || party || status || approval || from || to);
 
   const ofType = useMemo(() => invoices.filter((i) => i.type === type), [invoices, type]);
@@ -157,7 +160,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
             <span>to</span>
             <input type="date" aria-label="Invoice date to" value={to} onChange={(e) => setParam('to', e.target.value)} className="rounded-lg border-0 px-2 py-2 text-sm shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-navy-600" />
           </div>
-          {hasFilters && <Button variant="ghost" size="sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}>Clear filters</Button>}
+          {hasFilters && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>}
         </div>
         <DataTable testId="invoice-table" rows={rows} columns={columns} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)}
           initialSort={{ key: 'invoiceDate', dir: 'desc' }}

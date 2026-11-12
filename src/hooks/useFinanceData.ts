@@ -26,10 +26,11 @@ export function useInvoices() {
   return { ...query, invoices, today };
 }
 
-export function useActivity(options: { invoiceId?: string; limit?: number } = {}) {
+export function useActivity({ enabled = true, ...options }: { invoiceId?: string; limit?: number; enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.activity(options.invoiceId, options.limit),
     queryFn: () => repository.listActivity(options),
+    enabled,
   });
 }
 
@@ -40,13 +41,16 @@ export function useCounterparties(kind?: CounterpartyKind) {
 /** 所有寫入動作；成功後統一刷新相關快取。 */
 export function useInvoiceMutations() {
   const qc = useQueryClient();
-  const refresh = () => Promise.all([
-    qc.invalidateQueries({ queryKey: queryKeys.invoices }),
-    qc.invalidateQueries({ queryKey: ['activity'] }),
-    qc.invalidateQueries({ queryKey: ['counterparties'] }),
-  ]);
+  const keys = [queryKeys.invoices, ['activity'], ['counterparties']];
+  // 先取消進行中的讀取，再讓快取失效：
+  // 若某查詢正在「第一次載入」，TanStack Query 會把重新讀取合併到那次（舊的）請求，
+  // 畫面就會顯示變更前的資料。先取消可確保一定會重新讀取最新資料。
+  const refresh = async () => {
+    await Promise.all(keys.map((queryKey) => qc.cancelQueries({ queryKey })));
+    await Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey })));
+  };
   const m = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
+    // 每個動作建立一個 useMutation（呼叫順序固定，符合 Hooks 規則）
     useMutation({ mutationFn: (args: A) => fn(...args), onSuccess: refresh });
 
   return {

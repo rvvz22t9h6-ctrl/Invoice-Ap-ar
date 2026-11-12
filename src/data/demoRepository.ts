@@ -206,6 +206,7 @@ export class DemoRepository implements Repository {
 
   async listActivity({ limit = 10, invoiceId }: { limit?: number; invoiceId?: string } = {}) {
     this.require();
+
     const rows = this.state.activity
       .filter((a) => !invoiceId || a.invoiceId === invoiceId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))

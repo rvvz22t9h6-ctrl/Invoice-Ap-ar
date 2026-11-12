@@ -11,6 +11,9 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { cx } from '@/components/ui';
 import { useSettings } from '@/hooks/useFinanceData';
+import { useAutoGenerateTasks, useTasks, useToday } from '@/hooks/useTasks';
+import { reminderBadgeCount } from '@/domain/taskInsights';
+import { DailySummaryBanner, ReminderBell } from '@/features/tasks/ReminderCentre';
 
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>
@@ -19,6 +22,13 @@ const Icon = ({ d }: { d: string }) => (
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean };
 /** 導覽分組：總覽、帳冊、報表、設定。 */
 const NAV: { group: string; items: NavItem[] }[] = [
+  { group: 'My Day', items: [
+    { to: '/tasks', label: 'Today', end: true, icon: <Icon d="M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+    { to: '/tasks/calendar', label: 'Calendar', icon: <Icon d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
+    { to: '/tasks/all', label: 'All Tasks', icon: <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /> },
+    { to: '/tasks/recurring', label: 'Recurring Tasks', icon: <Icon d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4m14-1v2a4 4 0 0 1-4 4H3" /> },
+    { to: '/tasks/productivity', label: 'Productivity', icon: <Icon d="M12 20V10M18 20V4M6 20v-4" /> },
+  ] },
   { group: 'Overview', items: [
     { to: '/', label: 'Dashboard', end: true, icon: <Icon d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z" /> },
     { to: '/cash-flow', label: 'Cash Flow', icon: <Icon d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5" /> },
@@ -45,6 +55,10 @@ export function AppLayout() {
   const location = useLocation();
   const toast = useToast();
   const { settings } = useSettings();
+  useAutoGenerateTasks();
+  const { tasks } = useTasks();
+  const today = useToday();
+  const attention = reminderBadgeCount(tasks, today);
   const company = settings.companyName || 'Finance Portal';
 
   // 切換頁面時自動關閉手機選單
@@ -69,7 +83,8 @@ export function AppLayout() {
                 <NavLink key={n.to} to={n.to} end={n.end}
                   className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                     isActive ? 'bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#5b9be6]' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
-                  {n.icon}{n.label}
+                  {n.icon}<span className="flex-1">{n.label}</span>
+                  {n.to === '/tasks' && attention > 0 && <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white" data-testid="nav-task-badge">{attention}</span>}
                 </NavLink>
               ))}
             </div>
@@ -116,7 +131,8 @@ export function AppLayout() {
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>
-        <p className="font-display truncate text-sm font-semibold">{company}</p>
+        <p className="font-display min-w-0 flex-1 truncate text-sm font-semibold">{company}</p>
+        <ReminderBell dark />
       </header>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -126,6 +142,11 @@ export function AppLayout() {
       )}
 
       <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mb-3 hidden items-center justify-between gap-3 lg:flex">
+          <p className="text-xs font-medium text-slate-400">{new Date(`${today}T00:00:00Z`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })} · Malaysia time</p>
+          <ReminderBell />
+        </div>
+        <DailySummaryBanner />
         <DataBanners onManage={() => setDataOpen(true)} />
         <Outlet />
         <DataManagerModal open={dataOpen} onClose={() => setDataOpen(false)} />

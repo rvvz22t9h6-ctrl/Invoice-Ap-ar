@@ -237,3 +237,29 @@ test('contact details can be updated by finance', async () => {
   assert.deepEqual(c, { contact_person: 'Ms Tan', payment_terms_days: 45 });
   await assert.rejects(as('finance', `update counterparties set payment_terms_days = 999 where id = '${CUSTOMER}'`), /payment_terms_days_check/);
 });
+
+test('tasks: recurring occurrences cannot be duplicated; completion date uses Malaysia time', async () => {
+  const { rows: [rule] } = await asCommit('finance', `insert into task_recurrences (title, category, priority, frequency, day_of_month, start_date)
+    values ('Pay EPF', 'Payroll', 'Urgent', 'monthly', 15, current_date) returning id`);
+  const ins = (id) => `insert into tasks (id, title, category, priority, due_date, recurrence_id, occurrence_date)
+    values ('${id}', 'Pay EPF', 'Payroll', 'Urgent', '2026-12-15', '${rule.id}', '2026-12-15')`;
+  await asCommit('finance', ins(`rec-${rule.id}-2026-12-15`));
+  // 同一 ID：ON CONFLICT DO NOTHING 略過
+  const again = await as('finance', `${ins(`rec-${rule.id}-2026-12-15`)} on conflict (id) do nothing returning id`);
+  assert.equal(again.rowCount, 0);
+  // 不同 ID、同一規則與日期：唯一索引拒絕
+  await assert.rejects(as('finance', ins('some-other-id')), /tasks_recurrence_occurrence_uq/);
+
+  // 完成：馬來西亞時間 2026-11-12 01:30 = UTC 2026-11-11 17:30
+  const { rows: [done] } = await as('finance', `update tasks set status = 'done', completed_at = '2026-11-11T17:30:00Z' where id = 'rec-${rule.id}-2026-12-15' returning completed_on::text`);
+  assert.equal(done.completed_on, '2026-11-12');
+  const { rows: [reopen] } = await as('finance', `update tasks set status = 'todo' where id = 'rec-${rule.id}-2026-12-15' returning completed_at, completed_on`);
+  assert.deepEqual(reopen, { completed_at: null, completed_on: null });
+});
+
+test('tasks: viewer read-only; invalid values rejected', async () => {
+  assert.ok((await as('viewer', `select count(*) from tasks`)).rows.length);
+  await assert.rejects(as('viewer', `insert into tasks (id, title, category, priority, due_date) values ('v1', 'x', 'AP', 'Low', current_date)`), /row-level security/);
+  await assert.rejects(as('finance', `insert into tasks (id, title, category, priority, due_date) values ('bad', 'x', 'Sales', 'Low', current_date)`), /tasks_category_check/);
+  await assert.rejects(as('finance', `insert into tasks (id, title, category, priority, due_date, start_date) values ('bad2', 'x', 'AP', 'Low', current_date, current_date + 1)`), /tasks_start_before_due/);
+});

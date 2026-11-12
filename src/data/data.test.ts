@@ -216,6 +216,74 @@ describe('Contacts, settings and settlement types', () => {
   });
 });
 
+describe('Tasks and recurring tasks', () => {
+  const ruleInput = (o: Record<string, unknown> = {}) => ({
+    title: 'Pay EPF', description: '', category: 'Payroll' as const, priority: 'Urgent' as const, remarks: '', frequency: 'monthly' as const,
+    interval: 1, customUnit: 'month' as const, weekdays: [], dayOfMonth: 15, month: 1, weekendAdjust: 'previous' as const, leadDays: 5,
+    startDate: '2026-10-01', endDate: null, active: true, ...o,
+  });
+
+  // 範例資料含任務；這些測試從空白開始
+  beforeEach(async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    await repo.clearAllData();
+  });
+
+  it('starts sample data with realistic tasks: some done, some overdue, no duplicates', async () => {
+    await repo.resetDemoData();
+    const tasks = await repo.listTasks();
+    expect(tasks.length).toBeGreaterThan(20);
+    expect(new Set(tasks.map((t) => t.id)).size).toBe(tasks.length);
+    expect(tasks.some((t) => t.status === 'done')).toBe(true);
+    expect(tasks.some((t) => t.status === 'todo' && t.dueDate < TODAY)).toBe(true);
+    expect(await repo.generateTasks()).toBe(0);
+  });
+
+  it('creates, completes, reopens and deletes tasks', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const t = await repo.saveTask({ title: 'Call bank', category: 'Banking', priority: 'High', dueDate: TODAY });
+    expect((await repo.setTaskStatus(t.id, 'done'))).toMatchObject({ status: 'done', completedOn: TODAY });
+    expect((await repo.setTaskStatus(t.id, 'todo'))).toMatchObject({ status: 'todo', completedOn: null, completedAt: null });
+    await expect(repo.saveTask({ title: '', category: 'Banking', priority: 'High', dueDate: TODAY })).rejects.toThrow(/Title is required/);
+    await repo.deleteTask(t.id);
+    expect(await repo.listTasks()).toHaveLength(0);
+  });
+
+  it('generates recurring tasks without duplicates, and deleted occurrences stay deleted', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    const rule = await repo.saveRecurrence(ruleInput());
+    const first = await repo.listTasks();
+    expect(first.map((t) => t.dueDate)).toEqual(['2026-10-15', '2026-11-13']); // 11/15 是週日 → 提前到週五
+    expect(await repo.generateTasks()).toBe(0);
+    expect(await repo.generateTasks()).toBe(0);
+    expect(await repo.listTasks()).toHaveLength(2);
+    await repo.deleteTask(first[1]!.id);
+    expect((await repo.listRecurrences())[0]!.skipDates).toEqual(['2026-11-15']);
+    // 規則修改後重新產生，被刪除的日期也不會回來
+    await repo.saveRecurrence(ruleInput({ priority: 'High' }), rule.id);
+    expect((await repo.listTasks()).map((t) => t.dueDate)).toEqual(['2026-10-15']);
+  });
+
+  it('a rule change keeps overdue tasks with their original due dates', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    const rule = await repo.saveRecurrence(ruleInput({ frequency: 'weekly', weekdays: [1], dayOfMonth: 0, startDate: '2026-11-01', weekendAdjust: 'none' }));
+    const before = await repo.listTasks();
+    expect(before.filter((t) => t.dueDate < TODAY).map((t) => t.dueDate)).toEqual(['2026-11-02', '2026-11-09']);
+    await repo.saveRecurrence(ruleInput({ frequency: 'weekly', weekdays: [5], dayOfMonth: 0, startDate: '2026-11-01', weekendAdjust: 'none' }), rule.id);
+    const after = await repo.listTasks();
+    expect(after.filter((t) => t.dueDate < TODAY).map((t) => t.dueDate)).toEqual(['2026-11-02', '2026-11-09']); // 逾期保留
+    expect(after.filter((t) => t.dueDate > TODAY).every((t) => new Date(`${t.dueDate}T00:00:00Z`).getUTCDay() === 5)).toBe(true);
+    await repo.deleteRecurrence(rule.id);
+    expect((await repo.listTasks()).map((t) => t.dueDate)).toEqual(['2026-11-02', '2026-11-09']); // 未來未開始的移除，逾期保留
+  });
+
+  it('viewer cannot change tasks and generation is skipped', async () => {
+    await repo.signIn('boss@demo.my', 'demo1234');
+    await expect(repo.saveTask({ title: 'x', category: 'AP', priority: 'Low', dueDate: TODAY })).rejects.toThrow(/read-only/);
+    expect(await repo.generateTasks()).toBe(0);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

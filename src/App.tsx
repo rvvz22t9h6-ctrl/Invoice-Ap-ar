@@ -13,6 +13,11 @@ import { AgingPage } from '@/features/aging/AgingPage';
 import { ContactsPage } from '@/features/contacts/ContactsPage';
 import { CashFlowPage } from '@/features/cashflow/CashFlowPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { MyDayPage } from '@/features/tasks/MyDayPage';
+import { TaskCalendarPage } from '@/features/tasks/TaskCalendarPage';
+import { AllTasksPage } from '@/features/tasks/AllTasksPage';
+import { RecurringPage } from '@/features/tasks/RecurringPage';
+import { ProductivityPage } from '@/features/tasks/ProductivityPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -33,6 +38,11 @@ export default function App() {
         <Route path="contacts" element={<ContactsPage />} />
         <Route path="cash-flow" element={<CashFlowPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="tasks" element={<MyDayPage />} />
+        <Route path="tasks/calendar" element={<TaskCalendarPage />} />
+        <Route path="tasks/all" element={<AllTasksPage />} />
+        <Route path="tasks/recurring" element={<RecurringPage />} />
+        <Route path="tasks/productivity" element={<ProductivityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

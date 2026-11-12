@@ -13,7 +13,9 @@ import type { ActivityEntry, ApprovalStatus, CompanySettings, Counterparty, Coun
 import { DEFAULT_SETTINGS } from '@/domain/types';
 import { kindForType } from '@/domain/types';
 import { DomainError, KIND_METHOD, normalizeName, type InvoiceFormValues, type PaymentFormValues } from '@/domain/validation';
-import type { CounterpartyPatch, Repository } from './repository';
+import type { CounterpartyPatch, RecurrenceInput, Repository } from './repository';
+import { validateTaskInput, type Task, type TaskCategory, type TaskInput, type TaskPriority, type TaskStatus } from '@/domain/tasks';
+import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
@@ -263,4 +265,135 @@ export class SupabaseRepository implements Repository {
     const rows = check(await this.db.from('payments').delete().eq('id', paymentId).select('id')) as { id: string }[];
     if (!rows.length) throw new DomainError('FORBIDDEN', 'Only an admin can reverse payments');
   }
+
+  // ---------- 每日工作與提醒中心 ----------
+
+  async listTasks() {
+    const all: Task[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const rows = check(await this.db.from('tasks').select('*').order('due_date').order('id').range(from, from + PAGE_SIZE - 1)) as TaskRow[];
+      all.push(...rows.map(mapTask));
+      if (rows.length < PAGE_SIZE) break;
+    }
+    return all;
+  }
+
+  async listRecurrences() {
+    return (check(await this.db.from('task_recurrences').select('*').order('created_at')) as RecurrenceRow[]).map(mapRecurrence);
+  }
+
+  async saveTask(input: TaskInput, id?: string) {
+    const errors = validateTaskInput(input);
+    const first = Object.entries(errors)[0];
+    if (first) throw new DomainError('VALIDATION', first[1], first[0]);
+    const row = {
+      title: input.title.trim(), description: (input.description ?? '').trim(), category: input.category, priority: input.priority,
+      start_date: input.startDate || null, due_date: input.dueDate, remarks: (input.remarks ?? '').trim(),
+      ...(input.status ? { status: input.status } : {}),
+    };
+    const res = id
+      ? await this.db.from('tasks').update(row).eq('id', id).select('*').single()
+      : await this.db.from('tasks').insert({ ...row, id: crypto.randomUUID(), status: input.status ?? 'todo' }).select('*').single();
+    return mapTask(check(res) as TaskRow);
+  }
+
+  async setTaskStatus(id: string, status: TaskStatus) {
+    return mapTask(check(await this.db.from('tasks').update({ status }).eq('id', id).select('*').single()) as TaskRow);
+  }
+
+  async deleteTask(id: string) {
+    const t = check(await this.db.from('tasks').select('*').eq('id', id).maybeSingle()) as TaskRow | null;
+    if (!t) return;
+    if (t.recurrence_id && t.occurrence_date) {
+      const r = check(await this.db.from('task_recurrences').select('skip_dates').eq('id', t.recurrence_id).maybeSingle()) as { skip_dates: string[] } | null;
+      if (r && !r.skip_dates.includes(t.occurrence_date)) {
+        check(await this.db.from('task_recurrences').update({ skip_dates: [...r.skip_dates, t.occurrence_date] }).eq('id', t.recurrence_id).select('id'));
+      }
+    }
+    check(await this.db.from('tasks').delete().eq('id', id).select('id'));
+  }
+
+  async saveRecurrence(input: RecurrenceInput, id?: string) {
+    const row = recurrenceRow(input);
+    let rule: RecurrenceRule;
+    if (!id) {
+      rule = mapRecurrence(check(await this.db.from('task_recurrences').insert(row).select('*').single()) as RecurrenceRow);
+    } else {
+      const cur = (await this.listRecurrences()).find((r) => r.id === id);
+      if (!cur) throw new DomainError('NOT_FOUND', 'Recurring task not found');
+      const reset = resetFutureOccurrences({ ...cur, ...input }, await this.listTasks(), this.today());
+      if (reset.removedIds.length) check(await this.db.from('tasks').delete().in('id', reset.removedIds).select('id'));
+      rule = mapRecurrence(check(await this.db.from('task_recurrences').update({ ...row, generated_through: reset.rule.generatedThrough, updated_at: new Date().toISOString() })
+        .eq('id', id).select('*').single()) as RecurrenceRow);
+    }
+    await this.generateTasks();
+    return rule;
+  }
+
+  async deleteRecurrence(id: string) {
+    const cur = (await this.listRecurrences()).find((r) => r.id === id);
+    if (!cur) return;
+    const reset = resetFutureOccurrences(cur, await this.listTasks(), this.today());
+    if (reset.removedIds.length) check(await this.db.from('tasks').delete().in('id', reset.removedIds).select('id'));
+    check(await this.db.from('task_recurrences').delete().eq('id', id).select('id'));
+  }
+
+  async generateTasks() {
+    const rules = await this.listRecurrences();
+    if (!rules.length) return 0;
+    const existing = new Set((await this.listTasks()).map((t) => t.id));
+    const { tasks, rules: updated } = generateRecurringTasks(rules, existing, this.today(), new Date().toISOString());
+    if (tasks.length) {
+      // ON CONFLICT DO NOTHING：另一個裝置同時產生也不會重複
+      check(await this.db.from('tasks').upsert(tasks.map(taskRow), { onConflict: 'id', ignoreDuplicates: true }).select('id'));
+    }
+    for (const r of updated) {
+      const before = rules.find((x) => x.id === r.id);
+      if (before?.generatedThrough !== r.generatedThrough) {
+        check(await this.db.from('task_recurrences').update({ generated_through: r.generatedThrough }).eq('id', r.id).select('id'));
+      }
+    }
+    return tasks.length;
+  }
+}
+
+// ---------- 任務列對應 ----------
+interface TaskRow {
+  id: string; title: string; description: string; category: TaskCategory; priority: TaskPriority; start_date: string | null; due_date: string;
+  status: TaskStatus; remarks: string; completed_at: string | null; completed_on: string | null; recurrence_id: string | null;
+  occurrence_date: string | null; created_at: string; updated_at: string;
+}
+interface RecurrenceRow {
+  id: string; title: string; description: string; category: TaskCategory; priority: TaskPriority; remarks: string; frequency: RecurrenceRule['frequency'];
+  interval: number; custom_unit: RecurrenceRule['customUnit']; weekdays: number[]; day_of_month: number; month: number;
+  weekend_adjust: RecurrenceRule['weekendAdjust']; lead_days: number; start_date: string; end_date: string | null; active: boolean;
+  generated_through: string | null; skip_dates: string[]; created_at: string; updated_at: string;
+}
+function mapTask(r: TaskRow): Task {
+  return {
+    id: r.id, title: r.title, description: r.description, category: r.category, priority: r.priority, startDate: r.start_date, dueDate: r.due_date,
+    status: r.status, remarks: r.remarks, createdAt: r.created_at, updatedAt: r.updated_at, completedAt: r.completed_at, completedOn: r.completed_on,
+    recurrenceId: r.recurrence_id, occurrenceDate: r.occurrence_date,
+  };
+}
+function taskRow(t: Task) {
+  return {
+    id: t.id, title: t.title, description: t.description, category: t.category, priority: t.priority, start_date: t.startDate, due_date: t.dueDate,
+    status: t.status, remarks: t.remarks, recurrence_id: t.recurrenceId, occurrence_date: t.occurrenceDate,
+  };
+}
+function mapRecurrence(r: RecurrenceRow): RecurrenceRule {
+  return {
+    id: r.id, title: r.title, description: r.description, category: r.category, priority: r.priority, remarks: r.remarks, frequency: r.frequency,
+    interval: r.interval, customUnit: r.custom_unit, weekdays: r.weekdays ?? [], dayOfMonth: r.day_of_month, month: r.month, weekendAdjust: r.weekend_adjust,
+    leadDays: r.lead_days, startDate: r.start_date, endDate: r.end_date, active: r.active, generatedThrough: r.generated_through, skipDates: r.skip_dates ?? [],
+    createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+function recurrenceRow(i: RecurrenceInput) {
+  return {
+    title: i.title.trim(), description: i.description, category: i.category, priority: i.priority, remarks: i.remarks, frequency: i.frequency,
+    interval: i.interval, custom_unit: i.customUnit, weekdays: i.weekdays, day_of_month: i.dayOfMonth, month: i.month, weekend_adjust: i.weekendAdjust,
+    lead_days: i.leadDays, start_date: i.startDate, end_date: i.endDate, active: i.active,
+  };
 }

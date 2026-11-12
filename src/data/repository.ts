@@ -11,6 +11,11 @@
 import type { IsoDate } from '@/domain/dates';
 import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
+import type { Task, TaskInput, TaskStatus } from '@/domain/tasks';
+import type { RecurrenceRule } from '@/domain/recurrence';
+
+/** 週期規則可由使用者設定的欄位。 */
+export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
 
 /** 可修改的供應商／客戶欄位。 */
 export type CounterpartyPatch = Partial<Omit<Counterparty, 'id' | 'kind'>>;
@@ -53,6 +58,21 @@ export interface Repository {
   getSettings(): Promise<CompanySettings>;
   /** 僅管理員。 */
   updateSettings(patch: Partial<CompanySettings>): Promise<CompanySettings>;
+
+  // ---------- 每日工作與提醒中心 ----------
+  listTasks(): Promise<Task[]>;
+  listRecurrences(): Promise<RecurrenceRule[]>;
+  /** 新增（無 id）或修改任務。 */
+  saveTask(input: TaskInput, id?: string): Promise<Task>;
+  setTaskStatus(id: string, status: TaskStatus): Promise<Task>;
+  /** 刪除任務；若為週期任務，該日期不會再被產生。 */
+  deleteTask(id: string): Promise<void>;
+  /** 新增或修改週期規則；修改時未來未開始的任務會依新設定重新產生。 */
+  saveRecurrence(input: RecurrenceInput, id?: string): Promise<RecurrenceRule>;
+  /** 刪除週期規則：保留已有與逾期任務，只移除未來未開始的任務。 */
+  deleteRecurrence(id: string): Promise<void>;
+  /** 產生到期的週期任務（不會重複）；回傳新增數量。 */
+  generateTasks(): Promise<number>;
 
   // ---------- 附件（僅雲端模式提供檔案儲存）----------
   /** 將已上傳的附件記錄到發票上。 */

@@ -12,7 +12,11 @@ import { computeInvoice } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
 import { DEFAULT_SETTINGS } from '@/domain/types';
-import type { CounterpartyPatch } from './repository';
+import type { CounterpartyPatch, RecurrenceInput } from './repository';
+import { newTask, validateTaskInput, withStatus, type Task, type TaskInput, type TaskStatus } from '@/domain/tasks';
+import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
+import { RULE_TEMPLATES } from '@/domain/taskTemplates';
+import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
   assertCanCancel, assertCanRecordPayment, assertNotDuplicate, assertTotalCoversPaid, DomainError,
@@ -39,6 +43,9 @@ export interface DemoState {
   modifiedAt?: string | null;
   /** 公司設定（舊資料沒有，使用預設值）。 */
   settings?: CompanySettings;
+  /** 每日工作任務與週期規則（舊資料沒有，視為空）。 */
+  tasks?: Task[];
+  recurrences?: RecurrenceRule[];
 }
 
 /** 備份檔格式。 */
@@ -97,7 +104,43 @@ export function buildInitialDemoState(today: IsoDate): DemoState {
   }));
   // 範例公司設定：期初餘額設在 30 天前，讓現金流預測有合理起點
   const settings: CompanySettings = { ...DEFAULT_SETTINGS, companyName: 'Sample Trading Sdn Bhd', openingBalance: 18_500_000, openingBalanceDate: addDays(today, -30) };
-  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null, settings };
+  const { tasks, recurrences } = buildSampleTasks(today);
+  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null, settings, tasks, recurrences };
+}
+
+/**
+ * 範例任務：幾條常見週期規則（三週前開始）與一些單次任務。
+ * 過去的任務大多已完成（完成日 = 到期日或晚一天），留下少數逾期，讓「我的一天」與生產力圖表有真實感。
+ */
+function buildSampleTasks(today: IsoDate): { tasks: Task[]; recurrences: RecurrenceRule[] } {
+  const now = new Date().toISOString();
+  const keys = ['payroll-run', 'epf', 'socso', 'pcb', 'bank-rec', 'close-ledgers', 'mgmt-report', 'ap-run', 'ar-chase', 'bank-check'];
+  const rules: RecurrenceRule[] = RULE_TEMPLATES.filter((t) => keys.includes(t.key)).map(({ key, group: _g, note: _n, ...t }) => ({
+    ...t, id: `sample-${key}`, startDate: addDays(today, -21), endDate: null, active: true, generatedThrough: null, skipDates: [], createdAt: now, updatedAt: now,
+  }));
+  const gen = generateRecurringTasks(rules, new Set(), today, now);
+  const manual: [string, TaskCategory, TaskPriority, number, string][] = [
+    ['Follow up Gemilang Retail on INV-10203 payment', 'AR', 'High', -6, 'Promised payment last week'],
+    ['Renew company insurance policy', 'Administration', 'Medium', 3, ''],
+    ['Prepare auditor confirmation letters', 'GL', 'High', 9, ''],
+    ['Update bank signatories with new director', 'Banking', 'Urgent', 1, 'Bring board resolution'],
+    ['Reconcile petty cash', 'GL', 'Low', 0, ''],
+    ['Submit SST-02 return', 'GL', 'Urgent', 18, ''],
+  ];
+  const tasks: Task[] = [...gen.tasks, ...manual.map(([title, category, priority, off, remarks], i) => ({
+    ...newTask(`sample-task-${i}`, { title, category, priority, dueDate: addDays(today, off), remarks }, now, today),
+  }))];
+  // 過去的週期任務：大多已完成；保留最近的 AR 追款與一次銀行核對為逾期
+  let k = 0;
+  for (const t of tasks) {
+    if (t.dueDate >= today || !t.recurrenceId) continue;
+    k += 1;
+    if (t.recurrenceId === 'sample-ar-chase' && t.dueDate > addDays(today, -7)) continue;
+    if (k % 9 === 0) continue;
+    const doneOn = k % 4 === 0 ? addDays(t.dueDate, 1) : t.dueDate;
+    Object.assign(t, { status: 'done', completedOn: doneOn, completedAt: new Date(`${doneOn}T08:${String(10 + (k % 40)).padStart(2, '0')}:00Z`).toISOString() });
+  }
+  return { tasks, recurrences: gen.rules };
 }
 
 export class DemoRepository implements Repository {
@@ -396,6 +439,118 @@ export class DemoRepository implements Repository {
     inv.updatedAt = new Date().toISOString();
     this.log(inv.id, 'attachment.removed', `Removed attachment ${att.name} from ${this.label(inv)}`);
     this.commit();
+  }
+
+  // ---------- 每日工作與提醒中心 ----------
+
+  private get tasks(): Task[] { return (this.state.tasks ??= []); }
+  private get recurrences(): RecurrenceRule[] { return (this.state.recurrences ??= []); }
+
+  async listTasks() {
+    this.require();
+    return this.delay(this.tasks);
+  }
+
+  async listRecurrences() {
+    this.require();
+    return this.delay(this.recurrences);
+  }
+
+  async saveTask(input: TaskInput, id?: string) {
+    this.require('admin', 'finance');
+    const errors = validateTaskInput(input);
+    const first = Object.entries(errors)[0];
+    if (first) throw new DomainError('VALIDATION', first[1], first[0]);
+    const now = new Date().toISOString();
+    const today = this.today();
+    if (!id) {
+      const t = newTask(newId(), input, now, today);
+      this.tasks.push(t);
+      this.commit();
+      return this.delay(t);
+    }
+    const i = this.tasks.findIndex((t) => t.id === id);
+    if (i < 0) throw new DomainError('NOT_FOUND', 'Task not found');
+    const cur = this.tasks[i]!;
+    let next: Task = {
+      ...cur, title: input.title.trim(), description: (input.description ?? '').trim(), category: input.category, priority: input.priority,
+      startDate: input.startDate || null, dueDate: input.dueDate, remarks: (input.remarks ?? '').trim(), updatedAt: now,
+    };
+    if (input.status && input.status !== cur.status) next = withStatus(next, input.status, now, today);
+    this.tasks[i] = next;
+    this.commit();
+    return this.delay(next);
+  }
+
+  async setTaskStatus(id: string, status: TaskStatus) {
+    this.require('admin', 'finance');
+    const i = this.tasks.findIndex((t) => t.id === id);
+    if (i < 0) throw new DomainError('NOT_FOUND', 'Task not found');
+    this.tasks[i] = withStatus(this.tasks[i]!, status, new Date().toISOString(), this.today());
+    this.commit();
+    return this.delay(this.tasks[i]!);
+  }
+
+  async deleteTask(id: string) {
+    this.require('admin', 'finance');
+    const t = this.tasks.find((x) => x.id === id);
+    if (!t) return;
+    // 週期任務：記下此日期，之後不會再自動產生
+    if (t.recurrenceId && t.occurrenceDate) {
+      const r = this.recurrences.find((x) => x.id === t.recurrenceId);
+      if (r && !r.skipDates.includes(t.occurrenceDate)) r.skipDates = [...r.skipDates, t.occurrenceDate];
+    }
+    this.state.tasks = this.tasks.filter((x) => x.id !== id);
+    this.commit();
+  }
+
+  async saveRecurrence(input: RecurrenceInput, id?: string) {
+    this.require('admin', 'finance');
+    if (!input.title.trim()) throw new DomainError('VALIDATION', 'Title is required', 'title');
+    const now = new Date().toISOString();
+    const today = this.today();
+    let rule: RecurrenceRule;
+    if (!id) {
+      rule = { ...input, title: input.title.trim(), id: newId(), generatedThrough: null, skipDates: [], createdAt: now, updatedAt: now };
+      this.recurrences.push(rule);
+    } else {
+      const i = this.recurrences.findIndex((r) => r.id === id);
+      if (i < 0) throw new DomainError('NOT_FOUND', 'Recurring task not found');
+      const reset = resetFutureOccurrences({ ...this.recurrences[i]!, ...input, title: input.title.trim(), updatedAt: now }, this.tasks, today);
+      this.state.tasks = reset.keep;
+      rule = reset.rule;
+      this.recurrences[i] = rule;
+    }
+    this.runGeneration();
+    this.commit();
+    return this.delay(this.recurrences.find((r) => r.id === rule.id)!);
+  }
+
+  async deleteRecurrence(id: string) {
+    this.require('admin', 'finance');
+    const rule = this.recurrences.find((r) => r.id === id);
+    if (!rule) return;
+    this.state.tasks = resetFutureOccurrences(rule, this.tasks, this.today()).keep;
+    this.state.recurrences = this.recurrences.filter((r) => r.id !== id);
+    this.commit();
+  }
+
+  /** 執行週期任務產生（不儲存）。changed = 有新任務或規則進度有前進。 */
+  private runGeneration(): { created: number; changed: boolean } {
+    const { tasks, rules } = generateRecurringTasks(this.recurrences, new Set(this.tasks.map((t) => t.id)), this.today(), new Date().toISOString());
+    const changed = tasks.length > 0 || rules.some((r, i) => r.generatedThrough !== this.recurrences[i]!.generatedThrough);
+    if (changed) {
+      this.state.tasks = [...this.tasks, ...tasks];
+      this.state.recurrences = rules;
+    }
+    return { created: tasks.length, changed };
+  }
+
+  async generateTasks() {
+    if (!this.user || this.user.role === 'viewer') return 0;
+    const { created, changed } = this.runGeneration();
+    if (changed) this.save(); // 自動產生不算「使用者修改」，不更新備份提醒時間
+    return created;
   }
 
   async resetDemoData() {

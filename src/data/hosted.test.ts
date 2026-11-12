@@ -55,7 +55,7 @@ describe('HostedRepository', () => {
     await repo.whenSaved();
     const afterSeed = stats.sets;
     expect(afterSeed).toBeGreaterThan(5);
-    expect(afterSeed).toBeLessThan(20); // 約 12 個月份文件 + 3 個 meta，而不是 123 次
+    expect(afterSeed).toBeLessThan(30); // 約 12 個發票月份 + 3 個任務月份 + 5 個 meta，而不是上百次
     const unpaid = (await repo.listInvoices()).find((i) => !i.isCancelled && i.payments.length === 0)!;
     await repo.cancelInvoice(unpaid.id, 'Raised in error');
     await repo.whenSaved();
@@ -94,6 +94,24 @@ describe('HostedRepository', () => {
     repo.retrySave();
     await repo.whenSaved();
     expect(seen.at(-1)).toBe('saved');
+  });
+});
+
+describe('HostedRepository tasks', () => {
+  it('stores tasks by due month and recurring rules, and reloads them', async () => {
+    const { db, docs } = fakeDb();
+    const repo = await HostedRepository.create(db, owner);
+    await repo.saveRecurrence({ title: 'Bank rec', description: '', category: 'Banking', priority: 'High', remarks: '', frequency: 'monthly', interval: 1,
+      customUnit: 'month', weekdays: [], dayOfMonth: 5, month: 1, weekendAdjust: 'none', leadDays: 0, startDate: today, endDate: null, active: true });
+    await repo.saveTask({ title: 'One-off', category: 'GL', priority: 'Low', dueDate: today });
+    await repo.whenSaved();
+    expect([...docs.keys()].some((k) => k.startsWith('tasks/'))).toBe(true);
+    expect(docs.has('meta/recurrences')).toBe(true);
+    const again = await HostedRepository.create(db, owner);
+    const tasks = await again.listTasks();
+    expect(tasks.some((t) => t.title === 'One-off')).toBe(true);
+    expect(tasks.filter((t) => t.recurrenceId).length).toBeGreaterThan(0);
+    expect(await again.generateTasks()).toBe(0); // 重新開啟不重複產生
   });
 });
 

@@ -173,3 +173,27 @@ test('remove an attachment from an invoice', async ({ page }) => {
   await expect(page.getByRole('dialog').getByTestId('attachment-list')).toHaveCount(0);
   await expect(page.getByRole('dialog')).toContainText('Removed attachment sample-supplier-invoice.pdf');
 });
+
+test('tasks persist in the cloud; recurring tasks are not duplicated across reloads', async ({ page }) => {
+  await open(page);
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByTestId('quick-add-input').fill('Submit claims to payroll tomorrow #payroll');
+  await page.getByTestId('quick-add-submit').click();
+  await expect(page.getByText('Added "Submit claims to payroll"')).toBeVisible();
+  await page.getByRole('link', { name: 'Recurring Tasks' }).click();
+  await page.getByTestId('open-templates').click();
+  await page.getByTestId('add-templates').click();
+  await expect(page.getByTestId('rule-list')).toContainText('Pay EPF (KWSP) contribution');
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+  await page.getByRole('link', { name: 'All Tasks' }).click();
+  await page.getByLabel('View').selectOption('all');
+  const total = await page.getByTestId('task-table').locator('tfoot, tbody tr').count();
+  expect(total).toBeGreaterThan(5);
+  for (let i = 0; i < 2; i += 1) {
+    await page.reload();
+    await page.getByRole('link', { name: 'All Tasks' }).click();
+    await page.getByLabel('View').selectOption('all');
+    await expect(page.getByTestId('task-table')).toContainText('Submit claims to payroll');
+    await expect(page.getByTestId('task-table').locator('tfoot, tbody tr')).toHaveCount(total);
+  }
+});

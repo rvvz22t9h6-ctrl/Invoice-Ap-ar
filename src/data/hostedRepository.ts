@@ -11,6 +11,8 @@
  *   meta/activity           最近 300 筆活動紀錄
  *   meta/info               是否為範例資料、最後修改時間
  *   meta/settings           公司設定（名稱、期初銀行餘額、預設付款期限）
+ *   tasks/<YYYY-MM>[~n]     每日工作任務（依到期月份分組）
+ *   meta/recurrences        週期任務規則
  *
  * 寫入策略：每次變更後比對各文件內容，只寫入有變動的文件；
  * 同一時間只進行一個寫入（依序排隊），並把狀態回報給畫面（儲存中／已儲存／失敗）。
@@ -18,6 +20,8 @@
 import { todayIso } from '@/domain/dates';
 import type { ActivityEntry, CompanySettings, Counterparty, Invoice, UserProfile } from '@/domain/types';
 import { DEFAULT_SETTINGS } from '@/domain/types';
+import type { Task } from '@/domain/tasks';
+import type { RecurrenceRule } from '@/domain/recurrence';
 import { DemoRepository, memoryStore, STATE_VERSION, type DemoState } from './demoRepository';
 
 // ---------- 平台 db 介面（僅列出用到的部分）----------
@@ -36,16 +40,22 @@ type InvoiceRecord = Omit<Invoice, 'counterpartyName'>;
 
 /** 依發票月份分組，並將過大的組別切成多份文件。 */
 export function shardInvoices(invoices: InvoiceRecord[]): Map<string, InvoiceRecord[]> {
-  const byMonth = new Map<string, InvoiceRecord[]>();
-  for (const inv of invoices) {
-    const key = /^\d{4}-\d{2}/.test(inv.invoiceDate) ? inv.invoiceDate.slice(0, 7) : 'undated';
-    (byMonth.get(key) ?? byMonth.set(key, []).get(key)!).push(inv);
+  return shardByMonth(invoices, (i) => i.invoiceDate);
+}
+
+/** 依日期所在月份分組（每份文件低於 256 KiB 上限，過大時自動分割）。 */
+export function shardByMonth<T extends { id: string }>(items: T[], dateOf: (item: T) => string): Map<string, T[]> {
+  const byMonth = new Map<string, T[]>();
+  for (const item of items) {
+    const d = dateOf(item);
+    const key = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : 'undated';
+    (byMonth.get(key) ?? byMonth.set(key, []).get(key)!).push(item);
   }
-  const shards = new Map<string, InvoiceRecord[]>();
+  const shards = new Map<string, T[]>();
   for (const [month, list] of byMonth) {
     list.sort((a, b) => a.id.localeCompare(b.id));
     let part = 1;
-    let current: InvoiceRecord[] = [];
+    let current: T[] = [];
     let size = 0;
     for (const inv of list) {
       const bytes = JSON.stringify(inv).length + 1;
@@ -102,13 +112,24 @@ export class HostedRepository extends DemoRepository {
   // ---------- 載入 ----------
 
   private async loadFromCloud() {
-    const [info, cps, act, shards, settingsDoc] = await Promise.all([
+    const [info, cps, act, shards, settingsDoc, taskShards, recDoc] = await Promise.all([
       this.db.doc('meta/info').get(),
       this.db.doc('meta/counterparties').get(),
       this.db.doc('meta/activity').get(),
       this.db.collection('invoices').limit(1000).get(),
       this.db.doc('meta/settings').get(),
+      this.db.collection('tasks').limit(1000).get(),
+      this.db.doc('meta/recurrences').get(),
     ]);
+    const tasks: Task[] = [];
+    for (const d of taskShards.docs) {
+      const body = d.data() as { items?: Task[] } | undefined;
+      if (!body?.items) continue;
+      tasks.push(...body.items);
+      this.written.set(`tasks/${d.id}`, JSON.stringify({ items: body.items }));
+    }
+    const recurrences = ((recDoc.data() as { items?: RecurrenceRule[] } | undefined)?.items) ?? [];
+    if (recDoc.exists) this.written.set('meta/recurrences', JSON.stringify({ items: recurrences }));
     const settings = settingsDoc.data() as CompanySettings | undefined;
     if (settingsDoc.exists) this.written.set('meta/settings', JSON.stringify(settings));
     const invoices: InvoiceRecord[] = [];
@@ -126,7 +147,7 @@ export class HostedRepository extends DemoRepository {
     if (act.exists) this.written.set('meta/activity', JSON.stringify({ items: activity }));
     if (info.exists) this.written.set('meta/info', JSON.stringify({ isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null }));
     // 雲端是空的 → 從空白開始（不自動放入範例資料）
-    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined };
+    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined, tasks, recurrences };
   }
 
   // ---------- 儲存 ----------
@@ -153,6 +174,9 @@ export class HostedRepository extends DemoRepository {
     desired.set('meta/counterparties', JSON.stringify({ items: this.state.counterparties }));
     desired.set('meta/activity', JSON.stringify({ items: this.state.activity.slice(0, ACTIVITY_KEEP) }));
     if (this.state.settings) desired.set('meta/settings', JSON.stringify(this.state.settings));
+    // 任務依到期月份分組；週期規則存在單一文件
+    for (const [key, items] of shardByMonth(this.state.tasks ?? [], (t) => t.dueDate)) desired.set(`tasks/${key}`, JSON.stringify({ items }));
+    if (this.state.recurrences?.length || this.written.has('meta/recurrences')) desired.set('meta/recurrences', JSON.stringify({ items: this.state.recurrences ?? [] }));
     desired.set('meta/info', JSON.stringify({ isSample: this.state.isSample !== false, modifiedAt: this.state.modifiedAt ?? null }));
     try {
       for (const [path, json] of desired) {

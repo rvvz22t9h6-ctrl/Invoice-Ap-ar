@@ -121,6 +121,51 @@ describe('DemoRepository', () => {
   });
 });
 
+describe('Local data: start fresh, backup and restore', () => {
+  it('starts with sample data, can be cleared, and tracks changes', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    expect(repo.dataStatus().isSample).toBe(true);
+    await repo.clearAllData();
+    expect(await repo.listInvoices()).toHaveLength(0);
+    expect(repo.dataStatus()).toMatchObject({ isSample: false, invoiceCount: 0, lastBackupAt: null });
+    await repo.createInvoice('AR', form({ invoiceNumber: 'REAL-1' }));
+    expect(repo.dataStatus().invoiceCount).toBe(1);
+    expect(repo.dataStatus().modifiedAt).not.toBeNull();
+  });
+
+  it('backup → clear → restore brings everything back exactly', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    await repo.clearAllData();
+    const inv = await repo.createInvoice('AR', form({ invoiceNumber: 'REAL-2' }));
+    await repo.recordPayment(inv.id, payment('300'));
+    const backup = repo.exportBackup();
+    expect(repo.dataStatus().lastBackupAt).not.toBeNull();
+    const before = await repo.listInvoices();
+    await repo.clearAllData();
+    expect(await repo.listInvoices()).toHaveLength(0);
+    await repo.importBackup(backup);
+    expect(await repo.listInvoices()).toEqual(before);
+    expect((await repo.listActivity({ invoiceId: inv.id })).length).toBe(2);
+  });
+
+  it('rejects invalid backup files and keeps existing data', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    const count = (await repo.listInvoices()).length;
+    await expect(repo.importBackup('not json')).rejects.toThrow(/not a valid backup/);
+    await expect(repo.importBackup(JSON.stringify({ app: 'other', data: {} }))).rejects.toThrow(/not a backup from this system/);
+    const tampered = JSON.parse(repo.exportBackup());
+    tampered.data.invoices[0].invoiceAmount = 12.5; // 金額必須是整數仙
+    await expect(repo.importBackup(JSON.stringify(tampered))).rejects.toThrow(/not a backup/);
+    expect((await repo.listInvoices()).length).toBe(count);
+  });
+
+  it('only admin can clear or restore', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    await expect(repo.clearAllData()).rejects.toThrow(/admin/);
+    await expect(repo.importBackup(repo.exportBackup())).rejects.toThrow(/admin/);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

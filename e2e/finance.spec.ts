@@ -4,6 +4,7 @@
 import { expect, test } from '@playwright/test';
 import { addDays } from '../src/domain/dates';
 import { AGING_BUCKETS } from '../src/domain/aging';
+import ExcelJS from 'exceljs';
 import { expectedDashboard, fillInvoiceForm, kpi, login, money, today } from './helpers';
 
 test.describe('Dashboard', () => {
@@ -305,21 +306,6 @@ test.describe('Admin controls', () => {
     expect(total).toMatch(/^RM /);
   });
 
-  test('demo data reset restores the sample figures', async ({ page }) => {
-    const { dashboard: d } = expectedDashboard();
-    await login(page, 'admin');
-    await page.goto('/ar?status=Paid');
-    await page.getByTestId('invoice-table').locator('tbody tr').first().click();
-    await page.getByRole('dialog').getByTestId('payments-table').getByRole('button', { name: 'Reverse' }).first().click();
-    await page.getByRole('dialog').getByTestId('confirm-danger').click();
-    await expect(page.getByText('Payment reversed')).toBeVisible(); // 等待沖銷完成
-    await page.keyboard.press('Escape');
-    await page.getByRole('link', { name: 'Dashboard' }).click();
-    await expect(kpi(page, 'kpi-ar-collected')).not.toHaveText(money(d.AR.settled));
-    page.once('dialog', (dlg) => dlg.accept());
-    await page.getByRole('button', { name: 'Reset demo data' }).click();
-    await expect(kpi(page, 'kpi-ar-collected')).toHaveText(money(d.AR.settled));
-  });
 });
 
 test.describe('Aging report', () => {
@@ -332,7 +318,7 @@ test.describe('Aging report', () => {
     for (const b of AGING_BUCKETS) await expect(buckets).toContainText(b.label);
     await page.getByRole('tab', { name: 'Payables (AP)' }).click();
     await expect(page.getByTestId('aging-total')).toHaveText(money(d.AP.outstanding));
-    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export CSV' }).click()]);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'CSV', exact: true }).click()]);
     expect(download.suggestedFilename()).toBe(`AP-aging-${today}.csv`);
     const csv = (await (await download.createReadStream()).toArray()).join('');
     expect(csv).toContain('Supplier,Current (MYR),1–30 days (MYR)');
@@ -360,5 +346,95 @@ test.describe('Authentication', () => {
     await expect(page.getByTestId('kpi-ar-outstanding')).toBeVisible();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login$/);
+  });
+});
+
+/** 下載並讀取 Excel 檔。 */
+async function readXlsx(download: import('@playwright/test').Download) {
+  const chunks: Buffer[] = [];
+  for await (const c of await download.createReadStream()) chunks.push(c as Buffer);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.concat(chunks) as unknown as ArrayBuffer);
+  return wb;
+}
+const cellNum = (v: ExcelJS.CellValue) => (typeof v === 'object' && v && 'result' in v ? Number(v.result) : Number(v));
+
+test.describe('Excel export', () => {
+  test('full report from the dashboard has every sheet and matching figures', async ({ page }) => {
+    const { dashboard: d } = expectedDashboard();
+    await login(page, 'viewer');
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-full-report').click()]);
+    expect(download.suggestedFilename()).toBe(`Finance-Report-${today}.xlsx`);
+    const wb = await readXlsx(download);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'AR Invoices', 'AP Invoices', 'Payments', 'AR Aging', 'AP Aging']);
+    const summary = wb.getWorksheet('Summary')!;
+    let outstanding: ExcelJS.Row | undefined;
+    summary.eachRow((r) => { if (r.getCell(1).value === 'Outstanding balance') outstanding = r; });
+    expect(cellNum(outstanding!.getCell(2).value)).toBeCloseTo(d.AR.outstanding / 100, 2);
+    expect(cellNum(outstanding!.getCell(3).value)).toBeCloseTo(d.AP.outstanding / 100, 2);
+  });
+
+  test('AP list export follows the current filter', async ({ page }) => {
+    const { computed } = expectedDashboard();
+    await login(page, 'viewer');
+    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await page.getByLabel('Filter by payment status').selectOption('Overdue');
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-excel').click()]);
+    const ws = (await readXlsx(download)).worksheets[0]!;
+    const overdue = computed.filter((i) => i.type === 'AP' && i.status === 'Overdue');
+    expect(ws.rowCount).toBe(overdue.length + 2);
+    expect(cellNum(ws.getRow(ws.rowCount).getCell(10).value)).toBeCloseTo(overdue.reduce((t, i) => t + i.outstandingBalance, 0) / 100, 2);
+  });
+
+  test('aging export', async ({ page }) => {
+    await login(page, 'viewer');
+    await page.getByRole('link', { name: 'Aging Report' }).click();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-aging-excel').click()]);
+    expect(download.suggestedFilename()).toBe(`AR-aging-${today}.xlsx`);
+    expect((await readXlsx(download)).worksheets[0]!.name).toBe('AR Aging');
+  });
+});
+
+test.describe('My data (saved in this browser)', () => {
+  test('start fresh, enter real data, back up, restore', async ({ page }) => {
+    await login(page, 'admin');
+    await expect(page.getByTestId('sample-banner')).toBeVisible();
+
+    // 1. 清除範例資料
+    await page.getByRole('button', { name: 'Start with my own data…' }).click();
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId('start-fresh').click();
+    await expect(page.getByTestId('sample-banner')).toHaveCount(0);
+    await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText('RM 0.00');
+
+    // 2. 輸入真實資料 → 出現備份提醒
+    await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+    await page.getByTestId('new-invoice').click();
+    await fillInvoiceForm(page, { number: 'INV-0001', party: 'My First Customer Sdn Bhd', amount: '1500' });
+    await page.getByRole('dialog').getByTestId('save-invoice').click();
+    await expect(page.getByRole('dialog')).toContainText('INV-0001');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('backup-banner')).toBeVisible();
+
+    // 3. 下載備份 → 提醒消失
+    const [backup] = await Promise.all([page.waitForEvent('download'), page.getByTestId('backup-banner').getByRole('button', { name: 'Download backup' }).click()]);
+    expect(backup.suggestedFilename()).toBe(`invoice-backup-${today}.json`);
+    const backupPath = await backup.path();
+    await expect(page.getByTestId('backup-banner')).toHaveCount(0);
+
+    // 4. 刪除全部 → 由備份還原
+    await page.getByTestId('open-data-manager').click();
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId('start-fresh').click();
+    await expect(page.getByText('No accounts receivable invoices yet')).toBeVisible();
+    await page.getByTestId('open-data-manager').click();
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId('restore-input').setInputFiles(backupPath);
+    await expect(page.getByText('Backup restored')).toBeVisible();
+    await expect(page.getByTestId('invoice-table')).toContainText('INV-0001');
+
+    // 5. 重新整理頁面後資料仍在
+    await page.reload();
+    await expect(page.getByTestId('invoice-table')).toContainText('INV-0001');
   });
 });

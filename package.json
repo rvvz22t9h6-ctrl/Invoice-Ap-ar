@@ -14,11 +14,13 @@
     "test:db": "node scripts/test-db.mjs",
     "test:e2e": "playwright test --trace off",
     "seed:generate": "vite-node scripts/generate-seed.ts",
-    "test:all": "npm run typecheck && npm test && npm run test:e2e"
+    "test:all": "npm run typecheck && npm test && npm run test:e2e",
+    "build:file": "tsc -p tsconfig.json && vite build --mode file --outDir dist-file && node -e \"require('fs').renameSync('dist-file/index.html','dist-file/InvoiceTracker.html')\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "@tanstack/react-query": "^5.107.1",
+    "exceljs": "^4.4.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
@@ -41,6 +43,7 @@
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
     "vite-node": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^5.1.0"
   }
 }

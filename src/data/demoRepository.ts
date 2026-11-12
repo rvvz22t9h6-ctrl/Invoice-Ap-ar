@@ -31,6 +31,18 @@ interface DemoState {
   counterparties: Counterparty[];
   invoices: Omit<Invoice, 'counterpartyName'>[];
   activity: ActivityEntry[];
+  /** true = 仍是範例資料（提醒使用者改用自己的資料）。舊版資料沒有此欄位，視為範例。 */
+  isSample?: boolean;
+  /** 最後一次修改時間（ISO），用於備份提醒。 */
+  modifiedAt?: string | null;
+}
+
+/** 備份檔格式。 */
+interface BackupFile {
+  app: 'invoice-ap-ar';
+  version: number;
+  exportedAt: string;
+  data: DemoState;
 }
 
 const STATE_VERSION = 1;
@@ -79,7 +91,7 @@ export function buildInitialDemoState(today: IsoDate): DemoState {
   const activity: ActivityEntry[] = buildSampleActivity(sample, formatMYR).map((a, i) => ({
     id: `seed-${i}`, invoiceId: a.invoiceId, action: a.action, summary: a.summary, actorName: a.actorName, createdAt: at(a.dayOffset, a.minuteOfDay),
   }));
-  return { version: STATE_VERSION, counterparties, invoices, activity };
+  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null };
 }
 
 export class DemoRepository implements Repository {
@@ -88,6 +100,7 @@ export class DemoRepository implements Repository {
   private user: UserProfile | null = null;
   private static readonly DATA_KEY = 'invoice-ap-ar:demo-data';
   private static readonly USER_KEY = 'invoice-ap-ar:demo-user';
+  private static readonly BACKUP_KEY = 'invoice-ap-ar:last-backup';
 
   constructor(
     private readonly store: KeyValueStore = typeof localStorage !== 'undefined' ? safeStore(localStorage) : memoryStore(),
@@ -119,6 +132,12 @@ export class DemoRepository implements Repository {
 
   private save(state = this.state) {
     this.store.setItem(DemoRepository.DATA_KEY, JSON.stringify(state));
+  }
+
+  /** 使用者修改資料後呼叫：記錄修改時間並儲存。 */
+  private commit() {
+    this.state.modifiedAt = new Date().toISOString();
+    this.save();
   }
 
   private delay<T>(value: T): Promise<T> {
@@ -229,7 +248,7 @@ export class DemoRepository implements Repository {
     };
     this.state.invoices.push(inv);
     this.log(inv.id, 'invoice.created', `Created ${this.label(inv)} · ${formatMYR(inv.invoiceAmount + inv.taxAmount)}`);
-    this.save();
+    this.commit();
     return this.delay(this.withName(inv));
   }
 
@@ -245,7 +264,7 @@ export class DemoRepository implements Repository {
       description: v.description, invoiceAmount: v.invoiceAmount, taxAmount: v.taxAmount, updatedAt: new Date().toISOString(),
     });
     this.log(inv.id, 'invoice.updated', `Updated ${this.label(inv)}`);
-    this.save();
+    this.commit();
     return this.delay(this.withName(inv));
   }
 
@@ -260,7 +279,7 @@ export class DemoRepository implements Repository {
     inv.approvalStatus = status;
     inv.updatedAt = new Date().toISOString();
     this.log(inv.id, `invoice.${status}`, `${status.charAt(0).toUpperCase()}${status.slice(1)} ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async cancelInvoice(id: string, reason: string) {
@@ -272,7 +291,7 @@ export class DemoRepository implements Repository {
     inv.cancelReason = reason.trim();
     inv.updatedAt = new Date().toISOString();
     this.log(inv.id, 'invoice.cancelled', `Cancelled ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async restoreInvoice(id: string) {
@@ -283,7 +302,7 @@ export class DemoRepository implements Repository {
     inv.cancelReason = '';
     inv.updatedAt = new Date().toISOString();
     this.log(inv.id, 'invoice.restored', `Restored ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async deleteInvoice(id: string) {
@@ -293,7 +312,7 @@ export class DemoRepository implements Repository {
     this.state.invoices = this.state.invoices.filter((i) => i.id !== id);
     this.state.activity.forEach((a) => { if (a.invoiceId === id) a.invoiceId = null; });
     this.log(null, 'invoice.deleted', `Deleted ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async recordPayment(invoiceId: string, v: PaymentFormValues) {
@@ -306,7 +325,7 @@ export class DemoRepository implements Repository {
     });
     inv.payments.sort((a, b) => a.paymentDate.localeCompare(b.paymentDate));
     this.log(inv.id, 'payment.recorded', `${inv.type === 'AR' ? 'Collected' : 'Paid'} ${formatMYR(v.amount)} on ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async reversePayment(paymentId: string) {
@@ -316,12 +335,59 @@ export class DemoRepository implements Repository {
     const p = inv.payments.find((x) => x.id === paymentId)!;
     inv.payments = inv.payments.filter((x) => x.id !== paymentId);
     this.log(inv.id, 'payment.reversed', `Reversed ${inv.type === 'AR' ? 'collection of' : 'payment of'} ${formatMYR(p.amount)} on ${this.label(inv)}`);
-    this.save();
+    this.commit();
   }
 
   async resetDemoData() {
     this.state = buildInitialDemoState(this.todayFn());
     this.save();
+  }
+
+  // ---------- 本機資料管理（備份／還原／清空）----------
+
+  /** 清除所有資料（含範例），從空白開始使用自己的資料。 */
+  async clearAllData() {
+    this.require('admin');
+    this.state = { version: STATE_VERSION, counterparties: [], invoices: [], activity: [], isSample: false, modifiedAt: new Date().toISOString() };
+    this.save();
+  }
+
+  /** 產生備份檔內容（JSON 文字）。 */
+  exportBackup(): string {
+    this.require();
+    const file: BackupFile = { app: 'invoice-ap-ar', version: STATE_VERSION, exportedAt: new Date().toISOString(), data: this.state };
+    this.store.setItem(DemoRepository.BACKUP_KEY, file.exportedAt);
+    return JSON.stringify(file, null, 1);
+  }
+
+  /** 由備份檔還原；格式不正確時拋出錯誤，原有資料不受影響。 */
+  async importBackup(text: string) {
+    this.require('admin');
+    let file: BackupFile;
+    try {
+      file = JSON.parse(text) as BackupFile;
+    } catch {
+      throw new DomainError('VALIDATION', 'This file is not a valid backup (it is not JSON).');
+    }
+    const d = file?.data;
+    const ok = file?.app === 'invoice-ap-ar' && d && Array.isArray(d.invoices) && Array.isArray(d.counterparties) && Array.isArray(d.activity)
+      && d.invoices.every((i) => typeof i.id === 'string' && (i.type === 'AP' || i.type === 'AR') && Number.isInteger(i.invoiceAmount)
+        && Number.isInteger(i.taxAmount) && Array.isArray(i.payments) && i.payments.every((p) => Number.isInteger(p.amount)));
+    if (!ok) throw new DomainError('VALIDATION', 'This file is not a backup from this system.');
+    if (file.version > STATE_VERSION) throw new DomainError('VALIDATION', 'This backup was made by a newer version of the system.');
+    this.state = { ...d, version: STATE_VERSION };
+    this.save();
+    this.store.setItem(DemoRepository.BACKUP_KEY, file.exportedAt);
+  }
+
+  /** 本機資料狀態（畫面提醒用）。 */
+  dataStatus() {
+    return {
+      isSample: this.state.isSample !== false,
+      invoiceCount: this.state.invoices.length,
+      modifiedAt: this.state.modifiedAt ?? null,
+      lastBackupAt: this.store.getItem(DemoRepository.BACKUP_KEY),
+    };
   }
 }
 

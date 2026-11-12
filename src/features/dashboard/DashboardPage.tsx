@@ -16,6 +16,8 @@ import type { ComputedInvoice } from '@/domain/types';
 import { useActivity, useInvoices } from '@/hooks/useFinanceData';
 import { InvoiceDetailModal } from '@/features/invoices/InvoiceDetailModal';
 import { TrendChart } from './TrendChart';
+import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
+import { buildFullReport } from '@/lib/excelExport';
 
 export function DashboardPage() {
   const { invoices, today, isLoading, error } = useInvoices();
@@ -32,7 +34,9 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Live position of payables and receivables, calculated from invoice and payment records." />
+      <PageHeader title="Dashboard" subtitle="Live position of payables and receivables, calculated from invoice and payment records."
+        actions={<ExportExcelButton variant="primary" label="Export full report to Excel" testId="export-full-report"
+          fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today)} disabled={!invoices.length} />} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard testId="kpi-ar-outstanding" accent="ar" label="Total AR Outstanding" value={formatMYR(d.AR.outstanding)} hint={`${plural(d.AR.outstandingCount, 'unpaid customer invoice')}`} />

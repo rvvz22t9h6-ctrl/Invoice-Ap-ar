@@ -16,6 +16,8 @@ import { TYPE_LABELS, type ComputedInvoice, type InvoiceType } from '@/domain/ty
 import { InvoiceDetailModal } from '@/features/invoices/InvoiceDetailModal';
 import { useInvoices } from '@/hooks/useFinanceData';
 import { downloadTextFile } from '@/lib/download';
+import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
+import { buildAgingWorkbook } from '@/lib/excelExport';
 
 export function AgingPage() {
   const { invoices, today, isLoading } = useInvoices();
@@ -69,7 +71,8 @@ export function AgingPage() {
               </button>
             ))}
           </div>
-          <Button onClick={exportCsv} disabled={!report.byCounterparty.length}>Export CSV</Button>
+          <ExportExcelButton testId="export-aging-excel" fileName={`${type}-aging-${today}.xlsx`} build={() => buildAgingWorkbook(report)} disabled={!report.byCounterparty.length} />
+          <Button onClick={exportCsv} disabled={!report.byCounterparty.length}>CSV</Button>
         </>} />
 
       {/* 各區間摘要 */}

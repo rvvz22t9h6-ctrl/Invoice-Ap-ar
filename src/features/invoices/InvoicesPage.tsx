@@ -23,6 +23,8 @@ import { useInvoices } from '@/hooks/useFinanceData';
 import { downloadTextFile } from '@/lib/download';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
 import { InvoiceFormModal } from './InvoiceFormModal';
+import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
+import { buildInvoiceListWorkbook } from '@/lib/excelExport';
 
 /** 「未付清」= 未取消且有未付餘額（含 Pending、Partially Paid、Overdue）。 */
 const OUTSTANDING = 'Outstanding';
@@ -115,8 +117,9 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
       <PageHeader title={L.module}
         subtitle={type === 'AP' ? 'Supplier invoices — money the company owes.' : 'Customer invoices — money owed to the company.'}
         actions={<>
+          <ExportExcelButton testId="export-excel" fileName={`${type}-invoices-${today}.xlsx`} build={() => buildInvoiceListWorkbook(rows, type)} disabled={!rows.length} />
           <Button onClick={exportCsv} disabled={!rows.length} data-testid="export-csv"
-            icon={<svg viewBox="0 0 20 20" className="size-4" fill="currentColor" aria-hidden><path d="M10 3v8.6l3.3-3.3 1.1 1.1L10 14.8 5.6 9.4l1.1-1.1L10 11.6V3zM4 15h12v2H4z" /></svg>}>Export CSV</Button>
+            icon={<svg viewBox="0 0 20 20" className="size-4" fill="currentColor" aria-hidden><path d="M10 3v8.6l3.3-3.3 1.1 1.1L10 14.8 5.6 9.4l1.1-1.1L10 11.6V3zM4 15h12v2H4z" /></svg>}>CSV</Button>
           {can(user?.role, 'invoice.create') && <Button variant="primary" onClick={() => setCreating(true)} data-testid="new-invoice">+ {L.newInvoice}</Button>}
         </>} />
 

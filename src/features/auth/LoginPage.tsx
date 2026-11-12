@@ -8,6 +8,7 @@ import { Alert, Button, TextInput } from '@/components/ui';
 import { repository } from '@/data';
 import { DEMO_USERS } from '@/data/demoRepository';
 import { ROLE_LABEL } from '@/domain/types';
+import logoUrl from '@/assets/logo.svg';
 import { useAuth } from './AuthContext';
 
 export function LoginPage() {
@@ -41,7 +42,7 @@ export function LoginPage() {
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
       <div className="hidden flex-col justify-between bg-navy-900 p-12 text-white lg:flex">
         <div className="flex items-center gap-3">
-          <img src="/favicon.svg" alt="" className="size-10 rounded-lg ring-1 ring-white/10" />
+          <img src={logoUrl} alt="" className="size-10 rounded-lg ring-1 ring-white/10" />
           <span className="font-semibold">Finance Portal</span>
         </div>
         <div className="max-w-md">
@@ -64,7 +65,8 @@ export function LoginPage() {
 
           {repository.mode === 'demo' && (
             <div className="mt-10">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Demo accounts · password demo1234</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Choose a profile · password demo1234</p>
+              <p className="mt-1 text-xs text-slate-500">Data is saved in this browser. Use <strong>Mei Ling Tan (Admin)</strong> for everyday work; the Viewer profile shows the read-only view.</p>
               <div className="mt-3 space-y-2">
                 {DEMO_USERS.map((u) => (
                   <button key={u.id} type="button" disabled={busy} onClick={() => submit(undefined, { email: u.email, password: u.password })}

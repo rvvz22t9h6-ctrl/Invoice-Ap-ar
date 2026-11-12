@@ -45,6 +45,15 @@ export interface Repository {
   /** 沖銷付款（僅管理員）。 */
   reversePayment(paymentId: string): Promise<void>;
 
-  /** 僅示範模式：還原範例資料。 */
+  // ---------- 僅本機模式（資料存在瀏覽器）----------
+  /** 載入範例資料（會取代目前所有資料）。 */
   resetDemoData?(): Promise<void>;
+  /** 清空所有資料，從空白開始。 */
+  clearAllData?(): Promise<void>;
+  /** 匯出備份（JSON 文字）。 */
+  exportBackup?(): string;
+  /** 由備份還原（會取代目前所有資料）。 */
+  importBackup?(text: string): Promise<void>;
+  /** 資料狀態：是否為範例、筆數、最後修改與最後備份時間。 */
+  dataStatus?(): { isSample: boolean; invoiceCount: number; modifiedAt: string | null; lastBackupAt: string | null };
 }

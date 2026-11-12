@@ -5,10 +5,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { repository } from '@/data';
+import { DataBanners, DataManagerModal, downloadBackup, isLocalMode } from '@/features/data/DataManager';
 import { ROLE_LABEL } from '@/domain/types';
 import { formatDate } from '@/domain/dates';
+import logoUrl from '@/assets/logo.svg';
 import { useAuth } from '@/features/auth/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/Toast';
 import { cx } from '@/components/ui';
 
@@ -26,24 +27,18 @@ const NAV: { to: string; label: string; icon: ReactNode; end?: boolean }[] = [
 export function AppLayout() {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
   const location = useLocation();
-  const qc = useQueryClient();
   const toast = useToast();
 
   // 切換頁面時自動關閉手機選單
   useEffect(() => setOpen(false), [location.pathname]);
 
-  const resetDemo = async () => {
-    if (!repository.resetDemoData || !confirm('Reset all demo data to the original sample set? Your changes will be lost.')) return;
-    await repository.resetDemoData();
-    await qc.invalidateQueries();
-    toast('Demo data has been reset');
-  };
 
   const sidebar = (
     <div className="flex h-full flex-col bg-navy-900 text-navy-100">
       <div className="flex items-center gap-3 px-5 py-5">
-        <img src="/favicon.svg" alt="" className="size-9 rounded-lg ring-1 ring-white/10" />
+        <img src={logoUrl} alt="" className="size-9 rounded-lg ring-1 ring-white/10" />
         <div className="leading-tight">
           <p className="text-sm font-semibold text-white">Finance Portal</p>
           <p className="text-xs text-navy-300">AP &amp; AR Management</p>
@@ -59,11 +54,14 @@ export function AppLayout() {
         ))}
       </nav>
       <div className="space-y-3 border-t border-white/10 px-5 py-4">
-        {repository.mode === 'demo' && (
-          <div className="rounded-lg bg-white/5 px-3 py-2 text-xs text-navy-200">
-            <p className="font-semibold text-amber-300">Demo mode</p>
-            <p className="mt-0.5">Sample data stored in this browser.</p>
-            <button type="button" onClick={resetDemo} className="mt-1.5 font-medium text-white underline-offset-2 hover:underline">Reset demo data</button>
+        {isLocalMode() && (
+          <div className="rounded-lg bg-white/5 px-3 py-2.5 text-xs text-navy-200">
+            <p className="font-semibold text-white">Saved in this browser</p>
+            <p className="mt-0.5">Back up regularly to keep your data safe.</p>
+            <div className="mt-2 flex gap-3">
+              <button type="button" onClick={() => { downloadBackup(); toast('Backup downloaded'); }} className="font-medium text-white underline-offset-2 hover:underline">Backup</button>
+              <button type="button" onClick={() => setDataOpen(true)} className="font-medium text-white underline-offset-2 hover:underline" data-testid="open-data-manager">My data…</button>
+            </div>
           </div>
         )}
         <div className="flex items-center gap-3">
@@ -100,8 +98,10 @@ export function AppLayout() {
       )}
 
       <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <DataBanners onManage={() => setDataOpen(true)} />
         <p className="mb-1 text-xs font-medium text-slate-400">Today · {formatDate(repository.today())} (MYT)</p>
         <Outlet />
+        <DataManagerModal open={dataOpen} onClose={() => setDataOpen(false)} />
       </main>
     </div>
   );

@@ -6,7 +6,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
-import { fillInvoiceForm } from './helpers';
+import { fillInvoiceForm, openNav } from './helpers';
 
 const file = 'dist-artifact/finance-portal.html';
 test.skip(!existsSync(file), 'Run "npm run build:artifact" first');
@@ -62,6 +62,8 @@ test('owner: empty start, add invoice, saved to cloud, reload keeps it, Excel vi
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await open(page);
+  await expect(page.getByTestId('task-kpi-today')).toBeVisible(); // 首頁 = 每日工作儀表板
+  await openNav(page, 'Finance Overview');
   await expect(page.getByTestId('welcome')).toBeVisible();
   await expect(page.getByText('Carrie', { exact: true })).toBeVisible(); // 側邊欄的使用者名稱
   await expect(page.getByText(/Good (morning|afternoon|evening), Carrie/)).toBeVisible();
@@ -75,7 +77,7 @@ test('owner: empty start, add invoice, saved to cloud, reload keeps it, Excel vi
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
 
   await page.reload();
-  await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+  await openNav(page, 'Accounts Receivable');
   await expect(page.getByTestId('invoice-table')).toContainText('INV-1001');
   await expect(page.getByTestId('footer-outstanding')).toHaveText('RM 2,700.00');
 
@@ -91,6 +93,7 @@ test('owner: load sample data and remove it with in-page confirmation', async ({
   await page.getByTestId('load-sample').click();
   await page.getByTestId('confirm-data-action').click();
   await expect(page.getByTestId('sample-banner')).toBeVisible();
+  await openNav(page, 'Finance Overview');
   await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(24);
   await page.getByTestId('export-full-report').click();
   await expect.poll(async () => (await saved(page)).map((s) => s.filename)).toEqual([expect.stringMatching(/^Finance-Report-.*\.xlsx$/)]);
@@ -100,9 +103,11 @@ test('owner: load sample data and remove it with in-page confirmation', async ({
   await page.getByRole('button', { name: 'Start with my own data…' }).click();
   await page.getByTestId('start-fresh').click();
   await page.getByTestId('confirm-data-action').click();
+  await openNav(page, 'Finance Overview');
   await expect(page.getByTestId('welcome')).toBeVisible();
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
   await page.reload();
+  await openNav(page, 'Finance Overview');
   await expect(page.getByTestId('welcome')).toBeVisible();
 });
 
@@ -110,7 +115,7 @@ test('shared viewer is read-only', async ({ page }) => {
   await open(page, 'viewer');
   await expect(page.getByText('Viewer · read-only')).toBeVisible();
   await expect(page.getByRole('link', { name: '+ New customer invoice (AR)' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await expect(page.getByTestId('new-invoice')).toHaveCount(0);
 });
 
@@ -118,7 +123,7 @@ test('upload a PDF invoice: details fill in automatically, file is attached on s
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await open(page);
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId('read-note')).toContainText('Details filled in from sample-supplier-invoice.pdf', { timeout: 20_000 });
@@ -152,7 +157,7 @@ test('upload a PDF invoice: details fill in automatically, file is attached on s
   // 重新載入後附件仍在；再次上傳同一張發票會提示重複
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
   await page.reload();
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await expect(page.getByTestId('has-attachment')).toBeVisible();
   await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
   await expect(page.getByRole('dialog').getByText(/already in the system/)).toBeVisible({ timeout: 20_000 });
@@ -164,7 +169,7 @@ test('upload a PDF invoice: details fill in automatically, file is attached on s
 
 test('remove an attachment from an invoice', async ({ page }) => {
   await open(page);
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
   await expect(page.getByRole('dialog').getByTestId('read-note')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('dialog').getByTestId('save-invoice').click();
@@ -176,24 +181,36 @@ test('remove an attachment from an invoice', async ({ page }) => {
 
 test('tasks persist in the cloud; recurring tasks are not duplicated across reloads', async ({ page }) => {
   await open(page);
-  await page.getByRole('link', { name: 'Today' }).click();
+  await openNav(page, 'Dashboard');
   await page.getByTestId('quick-add-input').fill('Submit claims to payroll tomorrow #payroll');
   await page.getByTestId('quick-add-submit').click();
   await expect(page.getByText('Added "Submit claims to payroll"')).toBeVisible();
-  await page.getByRole('link', { name: 'Recurring Tasks' }).click();
+  await openNav(page, 'Reminders');
   await page.getByTestId('open-templates').click();
   await page.getByTestId('add-templates').click();
   await expect(page.getByTestId('rule-list')).toContainText('Pay EPF (KWSP) contribution');
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
-  await page.getByRole('link', { name: 'All Tasks' }).click();
+  await openNav(page, 'All Tasks');
   await page.getByLabel('View').selectOption('all');
   const total = await page.getByTestId('task-table').locator('tfoot, tbody tr').count();
   expect(total).toBeGreaterThan(5);
   for (let i = 0; i < 2; i += 1) {
     await page.reload();
-    await page.getByRole('link', { name: 'All Tasks' }).click();
+    await openNav(page, 'All Tasks');
     await page.getByLabel('View').selectOption('all');
     await expect(page.getByTestId('task-table')).toContainText('Submit claims to payroll');
     await expect(page.getByTestId('task-table').locator('tfoot, tbody tr')).toHaveCount(total);
   }
+});
+
+test('payroll checklist is saved in the cloud', async ({ page }) => {
+  await open(page);
+  await openNav(page, 'Payroll');
+  await page.getByTestId('checklist-item').filter({ hasText: 'Verify PCB' }).getByTestId('checklist-check').click();
+  await page.getByTestId('mark-paid').click();
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await openNav(page, 'Payroll');
+  await expect(page.getByTestId('checklist-pct')).toHaveText('18%');
+  await expect(page.getByTestId('salary-status')).toContainText('Paid');
 });

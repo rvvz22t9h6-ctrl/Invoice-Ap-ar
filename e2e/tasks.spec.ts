@@ -3,11 +3,11 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { addDays, formatDate } from '../src/domain/dates';
-import { login, today } from './helpers';
+import { login, today, openNav } from './helpers';
 
 async function openMyDay(page: Page) {
   await login(page, 'admin');
-  await page.getByRole('link', { name: 'Today' }).click();
+  await openNav(page, 'Dashboard');
   await expect(page.getByTestId('task-kpi-today')).toBeVisible();
 }
 const kpiNum = async (page: Page, id: string) => Number(await page.getByTestId(`${id}-value`).textContent());
@@ -60,7 +60,7 @@ test('full task form with validation, edit and delete', async ({ page }) => {
   await d.getByLabel('Remarks').fill('Check new joiners');
   await d.getByTestId('save-task').click();
   await expect(page.getByText('Task added')).toBeVisible();
-  await page.getByRole('link', { name: 'All Tasks' }).click();
+  await openNav(page, 'All Tasks');
   await page.getByLabel('Search tasks').fill('EA forms');
   await expect(page.getByTestId('task-table').locator('tbody tr')).toHaveCount(1);
   await page.getByTestId('task-table').locator('tbody tr').first().click();
@@ -75,7 +75,7 @@ test('full task form with validation, edit and delete', async ({ page }) => {
 
 test('recurring task: create, generated without duplicates, deleted occurrence stays deleted', async ({ page }) => {
   await openMyDay(page);
-  await page.getByRole('link', { name: 'Recurring Tasks' }).click();
+  await openNav(page, 'Reminders');
   await page.getByTestId('new-rule').click();
   const d = page.getByRole('dialog');
   await d.getByLabel('Task title *').fill('Review petty cash vouchers');
@@ -90,7 +90,7 @@ test('recurring task: create, generated without duplicates, deleted occurrence s
   await d.getByTestId('save-rule').click();
   await expect(page.getByTestId('rule-list')).toContainText('Review petty cash vouchers');
 
-  await page.getByRole('link', { name: 'All Tasks' }).click();
+  await openNav(page, 'All Tasks');
   await page.getByLabel('View').selectOption('all');
   await page.getByLabel('Search tasks').fill('petty cash vouchers');
   const rows = page.getByTestId('task-table').locator('tbody tr');
@@ -111,7 +111,7 @@ test('recurring task: create, generated without duplicates, deleted occurrence s
 
 test('templates add Malaysian statutory tasks', async ({ page }) => {
   await openMyDay(page);
-  await page.getByRole('link', { name: 'Recurring Tasks' }).click();
+  await openNav(page, 'Reminders');
   await page.getByTestId('open-templates').click();
   await expect(page.getByRole('dialog')).toContainText('Pay EPF (KWSP) contribution');
   await expect(page.getByRole('dialog')).toContainText('(already added)'); // 範例資料已有 EPF
@@ -122,7 +122,7 @@ test('templates add Malaysian statutory tasks', async ({ page }) => {
 
 test('calendar daily / weekly / monthly views, and add from a day', async ({ page }) => {
   await openMyDay(page);
-  await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+  await openNav(page, 'Task Calendar');
   await expect(page.getByTestId('cal-month')).toBeVisible();
   await expect(page.getByTestId('cal-task').first()).toBeVisible();
   await page.getByTestId('view-week').click();
@@ -183,7 +183,7 @@ test('reminder centre: badge, panel, payroll reminder and desktop notifications'
 
 test('productivity shows rates and history', async ({ page }) => {
   await openMyDay(page);
-  await page.getByRole('link', { name: 'Productivity' }).click();
+  await openNav(page, 'Productivity');
   await expect(page.getByTestId('prod-week-value')).toHaveText(/\d+%|—/);
   await expect(page.getByTestId('prod-table').locator('tbody tr')).toHaveCount(14);
   await expect(page.getByTestId('history-list').locator('li').first()).toBeVisible();

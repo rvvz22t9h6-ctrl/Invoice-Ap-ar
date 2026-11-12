@@ -16,6 +16,7 @@ import type { CounterpartyPatch, RecurrenceInput } from './repository';
 import { newTask, validateTaskInput, withStatus, type Task, type TaskInput, type TaskStatus } from '@/domain/tasks';
 import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
 import { RULE_TEMPLATES } from '@/domain/taskTemplates';
+import type { Checklist } from '@/domain/checklists';
 import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
@@ -46,6 +47,8 @@ export interface DemoState {
   /** 每日工作任務與週期規則（舊資料沒有，視為空）。 */
   tasks?: Task[];
   recurrences?: RecurrenceRule[];
+  /** 薪資與月結檢查清單。 */
+  checklists?: Checklist[];
 }
 
 /** 備份檔格式。 */
@@ -322,7 +325,7 @@ export class DemoRepository implements Repository {
     const now = new Date().toISOString();
     const inv: Omit<Invoice, 'counterpartyName'> = {
       id: newId(), type, invoiceNumber: v.invoiceNumber.trim(), counterpartyId: cp.id, invoiceDate: v.invoiceDate, dueDate: v.dueDate,
-      description: v.description, invoiceAmount: v.invoiceAmount, taxAmount: v.taxAmount,
+      description: v.description, remarks: v.remarks ?? '', invoiceAmount: v.invoiceAmount, taxAmount: v.taxAmount,
       approvalStatus: type === 'AP' ? 'pending' : null, // 新 AP 帳單一律從待審批開始
       isCancelled: false, cancelReason: '', createdAt: now, updatedAt: now, createdByName: user.fullName, payments: [],
     };
@@ -341,7 +344,7 @@ export class DemoRepository implements Repository {
     const cp = this.ensureCounterparty(kindForType(inv.type), v.counterpartyName);
     Object.assign(inv, {
       invoiceNumber: v.invoiceNumber.trim(), counterpartyId: cp.id, invoiceDate: v.invoiceDate, dueDate: v.dueDate,
-      description: v.description, invoiceAmount: v.invoiceAmount, taxAmount: v.taxAmount, updatedAt: new Date().toISOString(),
+      description: v.description, remarks: v.remarks ?? '', invoiceAmount: v.invoiceAmount, taxAmount: v.taxAmount, updatedAt: new Date().toISOString(),
     });
     this.log(inv.id, 'invoice.updated', `Updated ${this.label(inv)}`);
     this.commit();
@@ -551,6 +554,24 @@ export class DemoRepository implements Repository {
     const { created, changed } = this.runGeneration();
     if (changed) this.save(); // 自動產生不算「使用者修改」，不更新備份提醒時間
     return created;
+  }
+
+  // ---------- 薪資與月結檢查清單 ----------
+
+  async listChecklists() {
+    this.require();
+    return this.delay(this.state.checklists ?? []);
+  }
+
+  async saveChecklist(c: Checklist) {
+    this.require('admin', 'finance');
+    if (!/^\d{4}-\d{2}$/.test(c.month) || c.id !== `${c.kind}-${c.month}`) throw new DomainError('VALIDATION', 'Invalid checklist month');
+    const list = (this.state.checklists ??= []);
+    const i = list.findIndex((x) => x.id === c.id);
+    const next = { ...c, remarks: c.remarks.slice(0, 2000), updatedAt: new Date().toISOString() };
+    if (i >= 0) list[i] = next; else list.push(next);
+    this.commit();
+    return this.delay(next);
   }
 
   async resetDemoData() {

@@ -21,30 +21,28 @@ const Icon = ({ d }: { d: string }) => (
 
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean };
 /** 導覽分組：總覽、帳冊、報表、設定。 */
-const NAV: { group: string; items: NavItem[] }[] = [
-  { group: 'My Day', items: [
-    { to: '/tasks', label: 'Today', end: true, icon: <Icon d="M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
-    { to: '/tasks/calendar', label: 'Calendar', icon: <Icon d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
-    { to: '/tasks/all', label: 'All Tasks', icon: <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /> },
-    { to: '/tasks/recurring', label: 'Recurring Tasks', icon: <Icon d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4m14-1v2a4 4 0 0 1-4 4H3" /> },
-    { to: '/tasks/productivity', label: 'Productivity', icon: <Icon d="M12 20V10M18 20V4M6 20v-4" /> },
-  ] },
-  { group: 'Overview', items: [
-    { to: '/', label: 'Dashboard', end: true, icon: <Icon d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z" /> },
-    { to: '/cash-flow', label: 'Cash Flow', icon: <Icon d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5" /> },
-  ] },
-  { group: 'Ledgers', items: [
-    { to: '/ap', label: 'Accounts Payable', icon: <Icon d="M12 19V5m0 14-6-6m6 6 6-6" /> },
-    { to: '/ar', label: 'Accounts Receivable', icon: <Icon d="M12 5v14m0-14 6 6m-6-6-6 6" /> },
-    { to: '/contacts', label: 'Suppliers & Customers', icon: <Icon d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm13 9v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.74" /> },
-  ] },
-  { group: 'Reports', items: [
-    { to: '/aging', label: 'Aging Report', icon: <Icon d="M12 7v5l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
-  ] },
-  { group: 'Settings', items: [
-    { to: '/settings', label: 'Company Settings', icon: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /> },
-  ] },
+/** 主要功能：每天使用的 6 個項目。 */
+const MAIN_NAV: NavItem[] = [
+  { to: '/', label: 'Dashboard', end: true, icon: <Icon d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z" /> },
+  { to: '/ap', label: 'Accounts Payable', icon: <Icon d="M12 19V5m0 14-6-6m6 6 6-6" /> },
+  { to: '/ar', label: 'Accounts Receivable', icon: <Icon d="M12 5v14m0-14 6 6m-6-6-6 6" /> },
+  { to: '/payroll', label: 'Payroll', icon: <Icon d="M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2m2 4h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm7-5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" /> },
+  { to: '/closing', label: 'Monthly Closing', icon: <Icon d="M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /> },
+  { to: '/tasks/recurring', label: 'Reminders', icon: <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /> },
 ];
+
+/** 其他功能：收在「More」裡，預設收合，保持側邊欄簡潔。 */
+const MORE_NAV: NavItem[] = [
+  { to: '/finance', label: 'Finance Overview', icon: <Icon d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5" /> },
+  { to: '/cash-flow', label: 'Cash Flow', icon: <Icon d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+  { to: '/contacts', label: 'Suppliers & Customers', icon: <Icon d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /> },
+  { to: '/aging', label: 'Aging Report', icon: <Icon d="M12 7v5l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+  { to: '/tasks/calendar', label: 'Task Calendar', icon: <Icon d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
+  { to: '/tasks/all', label: 'All Tasks', icon: <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /> },
+  { to: '/tasks/productivity', label: 'Productivity', icon: <Icon d="M12 20V10M18 20V4M6 20v-4" /> },
+  { to: '/settings', label: 'Company Settings', icon: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /> },
+];
+const MORE_KEY = 'invoice-ap-ar:nav-more-open';
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
@@ -59,6 +57,19 @@ export function AppLayout() {
   const { tasks } = useTasks();
   const today = useToday();
   const attention = reminderBadgeCount(tasks, today);
+  // 「More」展開狀態：記在此裝置；目前頁面在 More 內時自動展開
+  const inMore = MORE_NAV.some((n) => location.pathname === n.to);
+  const [moreSaved, setMoreSaved] = useState(() => { try { return localStorage.getItem(MORE_KEY) === '1'; } catch { return false; } });
+  const moreOpen = moreSaved || inMore;
+  const toggleMore = () => { const next = !moreOpen; setMoreSaved(next); try { localStorage.setItem(MORE_KEY, next ? '1' : '0'); } catch { /* 略過 */ } };
+  const navLink = (n: NavItem) => (
+    <NavLink key={n.to} to={n.to} end={n.end}
+      className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        isActive ? 'bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#5b9be6]' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
+      {n.icon}<span className="flex-1">{n.label}</span>
+      {n.to === '/' && attention > 0 && <span aria-hidden title={`${attention} tasks need attention`} className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white" data-testid="nav-task-badge">{attention}</span>}
+    </NavLink>
+  );
   const company = settings.companyName || 'Finance Portal';
 
   // 切換頁面時自動關閉手機選單
@@ -74,22 +85,13 @@ export function AppLayout() {
           <p className="text-xs text-navy-300">{settings.companyName ? 'Finance Portal · AP & AR' : 'AP & AR Management'}</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2" aria-label="Main">
-        {NAV.map((g) => (
-          <div key={g.group}>
-            <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-400">{g.group}</p>
-            <div className="space-y-0.5">
-              {g.items.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end}
-                  className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive ? 'bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#5b9be6]' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
-                  {n.icon}<span className="flex-1">{n.label}</span>
-                  {n.to === '/tasks' && attention > 0 && <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white" data-testid="nav-task-badge">{attention}</span>}
-                </NavLink>
-              ))}
-            </div>
-          </div>
-        ))}
+      <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Main">
+        <div className="space-y-0.5">{MAIN_NAV.map(navLink)}</div>
+        <button type="button" onClick={toggleMore} aria-expanded={moreOpen} data-testid="nav-more"
+          className="mt-5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-400 hover:text-navy-200">
+          More <span aria-hidden className={cx('transition-transform', moreOpen && 'rotate-90')}>›</span>
+        </button>
+        {moreOpen && <div className="mt-1 space-y-0.5">{MORE_NAV.map(navLink)}</div>}
       </nav>
       <div className="space-y-3 border-t border-white/10 px-5 py-4">
         {isLocalMode() && (

@@ -174,6 +174,7 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
         <div><dt className="text-xs text-slate-500">{L.status}</dt><dd className="font-medium">{invoice.status}{invoice.isOverdue && invoice.isPartiallyPaid ? ' (part paid)' : ''}</dd></div>
         <div><dt className="text-xs text-slate-500">Last Payment</dt><dd className="font-medium">{formatDate(invoice.lastPaymentDate)}</dd></div>
         {invoice.description && <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-slate-500">Description</dt><dd>{invoice.description}</dd></div>}
+        {invoice.remarks && <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-slate-500">Remarks</dt><dd className="whitespace-pre-wrap" data-testid="detail-remarks">{invoice.remarks}</dd></div>}
       </dl>
 
       {/* 附件 */}

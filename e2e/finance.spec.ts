@@ -5,12 +5,13 @@ import { expect, test } from '@playwright/test';
 import { addDays } from '../src/domain/dates';
 import { AGING_BUCKETS } from '../src/domain/aging';
 import ExcelJS from 'exceljs';
-import { expectedDashboard, fillInvoiceForm, kpi, login, money, today } from './helpers';
+import { expectedDashboard, fillInvoiceForm, kpi, login, money, today, openNav, openFinance } from './helpers';
 
 test.describe('Dashboard', () => {
   test('every KPI equals the figure calculated from the invoice and payment records', async ({ page }) => {
     const { dashboard: d } = expectedDashboard();
     await login(page, 'viewer');
+    await openFinance(page);
     await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText(money(d.AR.outstanding));
     await expect(kpi(page, 'kpi-ap-outstanding')).toHaveText(money(d.AP.outstanding));
     await expect(kpi(page, 'kpi-ar-collected')).toHaveText(money(d.AR.settled));
@@ -26,6 +27,7 @@ test.describe('Dashboard', () => {
   test('trend chart renders 24 bars and its table view matches the data', async ({ page }) => {
     const { dashboard: d } = expectedDashboard();
     await login(page, 'viewer');
+    await openFinance(page);
     await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(24);
     await page.getByRole('button', { name: 'Show table' }).click();
     const last = d.trends.at(-1)!;
@@ -39,6 +41,7 @@ test.describe('Dashboard', () => {
 
   test('recent activity lists 10 entries and opens the related invoice', async ({ page }) => {
     await login(page, 'viewer');
+    await openFinance(page);
     const items = page.getByTestId('recent-activity').locator('li');
     await expect(items).toHaveCount(10);
     await items.first().getByRole('button').click();
@@ -49,7 +52,7 @@ test.describe('Dashboard', () => {
 test.describe('Viewer (boss) access', () => {
   test('is read-only everywhere', async ({ page }) => {
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await openNav(page, 'Accounts Payable');
     await expect(page.getByTestId('new-invoice')).toHaveCount(0);
     await page.getByTestId('invoice-table').locator('tbody tr').first().click();
     const dialog = page.getByRole('dialog');
@@ -66,7 +69,7 @@ test.describe('Accounts Receivable', () => {
   test('create invoice with validation, duplicate check, partial and full collection', async ({ page }) => {
     await login(page, 'finance');
     const { dashboard: before } = expectedDashboard();
-    await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+    await openNav(page, 'Accounts Receivable');
     await page.getByTestId('new-invoice').click();
     const dialog = page.getByRole('dialog');
 
@@ -131,7 +134,7 @@ test.describe('Accounts Receivable', () => {
     await page.keyboard.press('Escape');
 
     // 9. 儀表板：AR 已收增加 11,000；未付不變（新發票已收清）
-    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await openNav(page, 'Finance Overview');
     await expect(kpi(page, 'kpi-ar-collected')).toHaveText(money(before.AR.settled + 1_100_000));
     await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText(money(before.AR.outstanding));
   });
@@ -139,14 +142,14 @@ test.describe('Accounts Receivable', () => {
   test('a new unpaid invoice increases AR outstanding by exactly its total', async ({ page }) => {
     const { dashboard: before } = expectedDashboard();
     await login(page, 'finance');
-    await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+    await openNav(page, 'Accounts Receivable');
     await page.getByTestId('new-invoice').click();
     await fillInvoiceForm(page, { number: 'INV-E2E-2', party: 'Gemilang Retail Holdings Bhd', amount: '2500.50', tax: '150.03' });
     await expect(page.getByRole('dialog').getByTestId('form-total')).toHaveText('RM 2,650.53');
     await page.getByRole('dialog').getByTestId('save-invoice').click();
     await expect(page.getByRole('dialog')).toContainText('INV-E2E-2');
     await page.keyboard.press('Escape');
-    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await openNav(page, 'Finance Overview');
     await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText(money(before.AR.outstanding + 265_053));
   });
 
@@ -170,7 +173,7 @@ test.describe('Accounts Receivable', () => {
 test.describe('Accounts Payable', () => {
   test('approval workflow: finance creates → cannot pay → admin approves → payment recorded', async ({ page }) => {
     await login(page, 'finance');
-    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await openNav(page, 'Accounts Payable');
     await page.getByTestId('new-invoice').click();
     await fillInvoiceForm(page, { number: 'TNB-778812', party: 'Bekalan Elektrik Murni Sdn Bhd', amount: '3200', rate: '8' });
     await page.getByRole('dialog').getByTestId('save-invoice').click();
@@ -212,7 +215,7 @@ test.describe('Accounts Payable', () => {
   test('filters by supplier, status and approval; totals and CSV follow the filter', async ({ page }) => {
     const { computed } = expectedDashboard();
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await openNav(page, 'Accounts Payable');
     const table = page.getByTestId('invoice-table');
 
     await page.getByLabel('Filter by payment status').selectOption('Overdue');
@@ -248,7 +251,7 @@ test.describe('Accounts Payable', () => {
 
   test('column sorting toggles direction', async ({ page }) => {
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await openNav(page, 'Accounts Payable');
     const header = page.getByRole('button', { name: /^Outstanding/ });
     await header.click(); // 由小到大
     await header.click(); // 由大到小
@@ -262,7 +265,7 @@ test.describe('Accounts Payable', () => {
 test.describe('Admin controls', () => {
   test('cancel requires a reason, is excluded from totals, and can be restored; delete works', async ({ page }) => {
     await login(page, 'admin');
-    await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+    await openNav(page, 'Accounts Receivable');
     await page.getByTestId('new-invoice').click();
     await fillInvoiceForm(page, { number: 'INV-CANCEL-1', party: 'Test Customer Sdn Bhd', amount: '500' });
     await page.getByRole('dialog').getByTestId('save-invoice').click();
@@ -313,7 +316,7 @@ test.describe('Aging report', () => {
   test('bucket totals add up and equal outstanding; AP/AR toggle; CSV export', async ({ page }) => {
     const { dashboard: d } = expectedDashboard();
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Aging Report' }).click();
+    await openNav(page, 'Aging Report');
     await expect(page.getByTestId('aging-total')).toHaveText(money(d.AR.outstanding));
     const buckets = page.getByTestId('aging-buckets');
     for (const b of AGING_BUCKETS) await expect(buckets).toContainText(b.label);
@@ -329,6 +332,7 @@ test.describe('Aging report', () => {
   test('dashboard aging snapshot matches the full report', async ({ page }) => {
     const { dashboard: d } = expectedDashboard();
     await login(page, 'viewer');
+    await openFinance(page);
     await expect(page.getByTestId('aging-snapshot').locator('tfoot')).toContainText(money(d.AR.outstanding));
     await expect(page.getByTestId('aging-snapshot').locator('tfoot')).toContainText(money(d.AP.outstanding));
   });
@@ -344,7 +348,7 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('alert')).toHaveText('Incorrect email or password');
     await page.getByLabel('Password').fill('demo1234');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByTestId('kpi-ar-outstanding')).toBeVisible();
+    await expect(page.getByTestId('task-kpi-today')).toBeVisible();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login$/);
   });
@@ -364,6 +368,7 @@ test.describe('Excel export', () => {
   test('full report from the dashboard has every sheet and matching figures', async ({ page }) => {
     const { dashboard: d } = expectedDashboard();
     await login(page, 'viewer');
+    await openFinance(page);
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-full-report').click()]);
     expect(download.suggestedFilename()).toBe(`Finance-Report-${today}.xlsx`);
     const wb = await readXlsx(download);
@@ -378,7 +383,7 @@ test.describe('Excel export', () => {
   test('AP list export follows the current filter', async ({ page }) => {
     const { computed } = expectedDashboard();
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Accounts Payable' }).click();
+    await openNav(page, 'Accounts Payable');
     await page.getByLabel('Filter by payment status').selectOption('Overdue');
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-excel').click()]);
     const ws = (await readXlsx(download)).worksheets[0]!;
@@ -389,7 +394,7 @@ test.describe('Excel export', () => {
 
   test('aging export', async ({ page }) => {
     await login(page, 'viewer');
-    await page.getByRole('link', { name: 'Aging Report' }).click();
+    await openNav(page, 'Aging Report');
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-aging-excel').click()]);
     expect(download.suggestedFilename()).toBe(`AR-aging-${today}.xlsx`);
     expect((await readXlsx(download)).worksheets[0]!.name).toBe('AR Aging');
@@ -406,10 +411,11 @@ test.describe('My data (saved in this browser)', () => {
     await page.getByTestId('start-fresh').click();
     await page.getByTestId('confirm-data-action').click();
     await expect(page.getByTestId('sample-banner')).toHaveCount(0);
+    await openNav(page, 'Finance Overview');
     await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText('RM 0.00');
 
     // 2. 輸入真實資料 → 出現備份提醒
-    await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+    await openNav(page, 'Accounts Receivable');
     await page.getByTestId('new-invoice').click();
     await fillInvoiceForm(page, { number: 'INV-0001', party: 'My First Customer Sdn Bhd', amount: '1500' });
     await page.getByRole('dialog').getByTestId('save-invoice').click();

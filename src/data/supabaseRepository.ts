@@ -16,6 +16,7 @@ import { DomainError, KIND_METHOD, normalizeName, type InvoiceFormValues, type P
 import type { CounterpartyPatch, RecurrenceInput, Repository } from './repository';
 import { validateTaskInput, type Task, type TaskCategory, type TaskInput, type TaskPriority, type TaskStatus } from '@/domain/tasks';
 import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
+import type { Checklist } from '@/domain/checklists';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
@@ -28,7 +29,7 @@ interface CounterpartyRow {
 }
 interface InvoiceRow {
   id: string; invoice_type: InvoiceType; invoice_number: string; counterparty_id: string;
-  invoice_date: string; due_date: string; description: string; invoice_amount: number | string; tax_amount: number | string;
+  invoice_date: string; due_date: string; description: string; remarks?: string; invoice_amount: number | string; tax_amount: number | string;
   approval_status: ApprovalStatus | null; is_cancelled: boolean; cancel_reason: string; created_at: string; updated_at: string;
   counterparty: { name: string } | null;
   payments: PaymentRow[];
@@ -57,7 +58,7 @@ function mapCounterparty(r: CounterpartyRow): Counterparty {
 function mapInvoice(r: InvoiceRow): Invoice {
   return {
     id: r.id, type: r.invoice_type, invoiceNumber: r.invoice_number, counterpartyId: r.counterparty_id,
-    counterpartyName: r.counterparty?.name ?? '', invoiceDate: r.invoice_date, dueDate: r.due_date, description: r.description,
+    counterpartyName: r.counterparty?.name ?? '', invoiceDate: r.invoice_date, dueDate: r.due_date, description: r.description, remarks: r.remarks ?? '',
     invoiceAmount: sen(r.invoice_amount), taxAmount: sen(r.tax_amount), approvalStatus: r.approval_status,
     isCancelled: r.is_cancelled, cancelReason: r.cancel_reason, createdAt: r.created_at, updatedAt: r.updated_at,
     createdByName: null, payments: (r.payments ?? []).map(mapPayment).sort((a, b) => a.paymentDate.localeCompare(b.paymentDate)),
@@ -218,7 +219,7 @@ export class SupabaseRepository implements Repository {
   private invoicePayload(v: InvoiceFormValues, counterpartyId: string) {
     return {
       invoice_number: v.invoiceNumber.trim(), counterparty_id: counterpartyId, invoice_date: v.invoiceDate, due_date: v.dueDate,
-      description: v.description, invoice_amount: fromSen(v.invoiceAmount), tax_amount: fromSen(v.taxAmount),
+      description: v.description, remarks: v.remarks ?? '', invoice_amount: fromSen(v.invoiceAmount), tax_amount: fromSen(v.taxAmount),
     };
   }
 
@@ -355,7 +356,21 @@ export class SupabaseRepository implements Repository {
     }
     return tasks.length;
   }
+
+  // ---------- 薪資與月結檢查清單 ----------
+
+  async listChecklists() {
+    const rows = check(await this.db.from('checklists').select('*').order('month', { ascending: false })) as ChecklistRow[];
+    return rows.map((r): Checklist => ({ id: r.id, kind: r.kind, month: r.month, items: r.items ?? [], remarks: r.remarks, dueDate: r.due_date, createdAt: r.created_at, updatedAt: r.updated_at }));
+  }
+
+  async saveChecklist(c: Checklist) {
+    check(await this.db.from('checklists').upsert({ id: c.id, kind: c.kind, month: c.month, items: c.items, remarks: c.remarks, due_date: c.dueDate, updated_at: new Date().toISOString() }).select('id'));
+    return c;
+  }
 }
+
+interface ChecklistRow { id: string; kind: Checklist['kind']; month: string; items: Checklist['items']; remarks: string; due_date: string; created_at: string; updated_at: string }
 
 // ---------- 任務列對應 ----------
 interface TaskRow {

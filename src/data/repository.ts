@@ -13,6 +13,7 @@ import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counte
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 import type { Task, TaskInput, TaskStatus } from '@/domain/tasks';
 import type { RecurrenceRule } from '@/domain/recurrence';
+import type { Checklist } from '@/domain/checklists';
 
 /** 週期規則可由使用者設定的欄位。 */
 export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
@@ -73,6 +74,11 @@ export interface Repository {
   deleteRecurrence(id: string): Promise<void>;
   /** 產生到期的週期任務（不會重複）；回傳新增數量。 */
   generateTasks(): Promise<number>;
+
+  // ---------- 薪資與月結檢查清單 ----------
+  listChecklists(): Promise<Checklist[]>;
+  /** 儲存（新增或覆寫）一份月份清單。 */
+  saveChecklist(checklist: Checklist): Promise<Checklist>;
 
   // ---------- 附件（僅雲端模式提供檔案儲存）----------
   /** 將已上傳的附件記錄到發票上。 */

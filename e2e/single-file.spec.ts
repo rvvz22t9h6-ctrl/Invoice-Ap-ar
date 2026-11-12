@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { fillInvoiceForm } from './helpers';
+import { fillInvoiceForm, openNav } from './helpers';
 
 const file = resolve('dist-file/InvoiceTracker.html');
 const url = pathToFileURL(file).href;
@@ -19,10 +19,11 @@ test('works when opened directly from disk', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(url);
   await page.getByRole('button', { name: /Mei Ling/ }).click();
-  await expect(page.getByTestId('kpi-ar-outstanding')).toBeVisible();
+  await expect(page.getByTestId('task-kpi-today')).toBeVisible();
+  await openNav(page, 'Finance Overview');
   await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(24);
 
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await expect(page).toHaveURL(/#\/ap$/);
   await page.getByTestId('new-invoice').click();
   await fillInvoiceForm(page, { number: 'FILE-001', party: 'Disk Test Supplier', amount: '99.90' });

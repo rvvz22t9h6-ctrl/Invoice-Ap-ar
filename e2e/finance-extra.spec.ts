@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { expect, test, type Download } from '@playwright/test';
 import { addDays } from '../src/domain/dates';
 import { buildCashFlowForecast } from '../src/domain/cashflow';
-import { expectedDashboard, fillInvoiceForm, kpi, login, money, today } from './helpers';
+import { expectedDashboard, fillInvoiceForm, kpi, login, money, today, openNav } from './helpers';
 
 async function readXlsx(download: Download) {
   const chunks: Buffer[] = [];
@@ -17,7 +17,7 @@ async function readXlsx(download: Download) {
 
 test('contact payment terms set the due date on new invoices; statement and reminder', async ({ page }) => {
   await login(page, 'finance');
-  await page.getByRole('link', { name: 'Suppliers & Customers' }).click();
+  await openNav(page, 'Suppliers & Customers');
   await page.getByLabel('Search contacts').fill('Puncak');
   await page.getByTestId('contacts-table').locator('tbody tr').first().click();
   const dlg = page.getByRole('dialog');
@@ -42,7 +42,7 @@ test('contact payment terms set the due date on new invoices; statement and remi
   await page.keyboard.press('Escape');
 
   // 新增發票時選擇此客戶 → 到期日自動 = 發票日 + 45 天
-  await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+  await openNav(page, 'Accounts Receivable');
   await page.getByTestId('new-invoice').click();
   await page.getByRole('dialog').getByLabel('Customer Name *').fill('Puncak Healthcare Sdn Bhd');
   await expect(page.getByRole('dialog').getByLabel('Due Date *')).toHaveValue(addDays(today, 45));
@@ -51,7 +51,7 @@ test('contact payment terms set the due date on new invoices; statement and remi
 test('credit note and write-off settle invoices without counting as cash', async ({ page }) => {
   const { dashboard: d } = expectedDashboard();
   await login(page, 'admin');
-  await page.getByRole('link', { name: 'Accounts Receivable' }).click();
+  await openNav(page, 'Accounts Receivable');
   await page.getByTestId('new-invoice').click();
   await fillInvoiceForm(page, { number: 'CN-TEST-1', party: 'Credit Test Sdn Bhd', amount: '1000' });
   await page.getByRole('dialog').getByTestId('save-invoice').click();
@@ -70,14 +70,14 @@ test('credit note and write-off settle invoices without counting as cash', async
   await expect(detail.getByTestId('payments-table')).toContainText('Credit note');
   await expect(detail.getByTestId('payments-table')).toContainText('Write-off (bad debt)');
   await page.keyboard.press('Escape');
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  await openNav(page, 'Finance Overview');
   await expect(kpi(page, 'kpi-ar-collected')).toHaveText(money(d.AR.settled)); // 現金不變
   await expect(page.getByTestId('metrics')).toContainText('RM 800.00'); // 沖銷金額
 });
 
 test('AP payment run and bulk approval', async ({ page }) => {
   await login(page, 'admin');
-  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await openNav(page, 'Accounts Payable');
   await page.getByLabel('Filter by approval status').selectOption('pending');
   const pendingRows = page.getByTestId('invoice-table').locator('tbody tr');
   const nPending = await pendingRows.count();
@@ -103,7 +103,7 @@ test('AP payment run and bulk approval', async ({ page }) => {
 test('cash flow forecast follows the bank balance; settings change the company name', async ({ page }) => {
   const { computed } = expectedDashboard();
   await login(page, 'admin');
-  await page.getByRole('link', { name: 'Company Settings' }).click();
+  await openNav(page, 'Company Settings');
   await page.getByLabel('Company name').fill('Carrie Trading Sdn Bhd');
   await page.getByTestId('save-settings').click();
   await expect(page.getByTestId('company-name')).toHaveText('Carrie Trading Sdn Bhd');
@@ -112,7 +112,7 @@ test('cash flow forecast follows the bank balance; settings change the company n
   await page.getByTestId('save-balance').click();
   await expect(page.getByText('Bank balance saved')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Cash Flow' }).click();
+  await openNav(page, 'Cash Flow');
   const f = buildCashFlowForecast(computed, today, { openingBalance: 25_000_000, openingBalanceDate: today });
   await expect(kpi(page, 'cf-current')).toHaveText('RM 250,000.00');
   await expect(kpi(page, 'cf-in')).toHaveText(money(f.totals.inflow));

@@ -75,6 +75,7 @@ export const invoiceFormSchema = z.object({
   invoiceDate: isoDate('Invoice date'),
   dueDate: isoDate('Due date'),
   description: z.string().trim().max(500, 'Description is too long (max 500)').default(''),
+  remarks: z.string().trim().max(1000, 'Remarks are too long (max 1000)').default(''),
   invoiceAmount: moneyField('Invoice amount', { allowZero: false }),
   taxAmount: moneyField('Tax amount', { allowZero: true }),
 }).superRefine((v, ctx) => {

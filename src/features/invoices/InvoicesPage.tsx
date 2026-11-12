@@ -71,7 +71,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return ofType.filter((i) =>
-      (!needle || [i.invoiceNumber, i.counterpartyName, i.description].some((v) => v.toLowerCase().includes(needle)))
+      (!needle || [i.invoiceNumber, i.counterpartyName, i.description, i.remarks ?? ''].some((v) => v.toLowerCase().includes(needle)))
       && (!party || i.counterpartyName === party)
       && (!status || (status === OUTSTANDING ? i.outstandingBalance > 0 : i.status === status))
       && (!approval || i.approvalStatus === approval)
@@ -116,7 +116,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
         {r.attachments!.length}<span className="sr-only"> attachments</span></span>)}<span className="block text-xs text-slate-500 2xl:hidden">{formatDate(r.invoiceDate)}</span></span>, footer: `${rows.length} invoices` },
     {
       key: 'party', header: L.party, sortValue: (r) => r.counterpartyName,
-      render: (r) => <><span className="font-medium text-slate-900">{r.counterpartyName}</span>{r.description && <span className="block max-w-[16rem] truncate text-xs text-slate-500">{r.description}</span>}</>,
+      render: (r) => <><span className="font-medium text-slate-900">{r.counterpartyName}</span>{r.description && <span className="block max-w-[16rem] truncate text-xs text-slate-500">{r.description}</span>}{r.remarks && <span className="block max-w-[16rem] truncate text-xs text-amber-800" title={r.remarks}>✎ {r.remarks}</span>}</>,
     },
     { key: 'invoiceDate', header: 'Invoice Date', sortValue: (r) => r.invoiceDate, wideOnly: true, render: (r) => <span className="whitespace-nowrap">{formatDate(r.invoiceDate)}</span> },
     {

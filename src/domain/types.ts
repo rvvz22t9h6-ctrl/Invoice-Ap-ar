@@ -106,6 +106,8 @@ export interface Invoice {
   invoiceDate: IsoDate;
   dueDate: IsoDate;
   description: string;
+  /** 備註（跟進情況、聯絡紀錄等）；舊資料可能沒有。 */
+  remarks?: string;
   invoiceAmount: Sen;
   taxAmount: Sen;
   /** 僅 AP 有值；AR 為 null。 */

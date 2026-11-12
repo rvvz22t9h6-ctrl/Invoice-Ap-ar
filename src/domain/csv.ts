@@ -25,14 +25,14 @@ export function invoicesToCsv(invoices: ComputedInvoice[], type: InvoiceType): s
   const header = [
     'Invoice Number', L.party, 'Invoice Date', 'Due Date', 'Description',
     'Invoice Amount (MYR)', 'Tax Amount (MYR)', 'Total Amount (MYR)', `${L.paid} (MYR)`, 'Outstanding Balance (MYR)',
-    L.status, ...(type === 'AP' ? ['Approval Status'] : []), 'Days Overdue', 'Last Payment Date',
+    L.status, ...(type === 'AP' ? ['Approval Status'] : []), 'Days Overdue', 'Last Payment Date', 'Remarks',
   ];
   const rows = invoices.map((i) => [
     i.invoiceNumber, i.counterpartyName, i.invoiceDate, i.dueDate, i.description,
     senToDecimalString(i.invoiceAmount), senToDecimalString(i.taxAmount), senToDecimalString(i.totalAmount),
     senToDecimalString(i.amountPaid), senToDecimalString(i.outstandingBalance),
     i.status, ...(type === 'AP' ? [i.approvalStatus ? APPROVAL_LABEL[i.approvalStatus] : ''] : []),
-    i.daysOverdue, i.lastPaymentDate ?? '',
+    i.daysOverdue, i.lastPaymentDate ?? '', i.remarks ?? '',
   ]);
   return toCsv([header, ...rows]);
 }

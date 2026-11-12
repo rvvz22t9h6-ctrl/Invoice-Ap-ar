@@ -263,3 +263,13 @@ test('tasks: viewer read-only; invalid values rejected', async () => {
   await assert.rejects(as('finance', `insert into tasks (id, title, category, priority, due_date) values ('bad', 'x', 'Sales', 'Low', current_date)`), /tasks_category_check/);
   await assert.rejects(as('finance', `insert into tasks (id, title, category, priority, due_date, start_date) values ('bad2', 'x', 'AP', 'Low', current_date, current_date + 1)`), /tasks_start_before_due/);
 });
+
+test('checklists: one per kind and month; invoice remarks', async () => {
+  await asCommit('finance', `insert into checklists (id, kind, month, due_date) values ('payroll-2026-11', 'payroll', '2026-11', '2026-11-25')`);
+  await assert.rejects(as('finance', `insert into checklists (id, kind, month, due_date) values ('payroll-2026-11', 'payroll', '2026-11', '2026-11-25')`), /checklists_pkey/);
+  await assert.rejects(as('finance', `insert into checklists (id, kind, month, due_date) values ('x', 'payroll', '2026-12', '2026-12-25')`), /checklists_id_matches/);
+  await assert.rejects(as('viewer', `insert into checklists (id, kind, month, due_date) values ('closing-2026-11', 'closing', '2026-11', '2026-12-07')`), /row-level security/);
+  const { rows: [inv] } = await asCommit('finance', insertAR('REM-1'));
+  const { rows: [r] } = await as('finance', `update invoices set remarks = 'Promised Friday' where id = $1 returning remarks`, [inv.id]);
+  assert.equal(r.remarks, 'Promised Friday');
+});

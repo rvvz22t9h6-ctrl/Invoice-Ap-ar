@@ -15,7 +15,9 @@ import { TASK_CATEGORIES, TASK_PRIORITIES, type TaskCategory, type TaskPriority 
 import { RULE_TEMPLATES } from '@/domain/taskTemplates';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useRecurrences, useTaskMutations, useTasks, useToday } from '@/hooks/useTasks';
-import { CategoryChip, PriorityBadge } from './TaskParts';
+import { CategoryChip, PriorityBadge, TaskFormModal, TaskList } from './TaskParts';
+import { Link } from 'react-router-dom';
+import { isTaskOverdue, type Task } from '@/domain/tasks';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -29,6 +31,8 @@ export function RecurringPage() {
   const [templates, setTemplates] = useState(false);
   const { saveRule } = useTaskMutations();
   const toast = useToast();
+  const [openTask, setOpenTask] = useState<Task | null>(null);
+  const overdue = tasks.filter((t) => isTaskOverdue(t, today)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const toggle = async (r: RecurrenceRule) => {
     const { id, generatedThrough: _g, skipDates: _s, createdAt: _c, updatedAt: _u, ...input } = r;
@@ -38,13 +42,19 @@ export function RecurringPage() {
 
   return (
     <>
-      <PageHeader eyebrow="My Day" title="Recurring Tasks"
-        subtitle="Tasks that repeat on a schedule are created automatically, never twice for the same date. Unfinished ones stay on your list as overdue."
+      <PageHeader eyebrow="Reminders" title="Reminders"
+        subtitle="Daily, weekly and monthly reminders are created automatically, never twice for the same date. Unfinished ones stay on your list as overdue."
         actions={canEdit ? <>
           <Button onClick={() => setTemplates(true)} data-testid="open-templates">Add Malaysian payroll & month-end templates</Button>
           <Button variant="primary" onClick={() => setEditing('new')} data-testid="new-rule">+ New recurring task</Button>
         </> : undefined} />
-      <Card padded={false}>
+      {/* 逾期追蹤：一鍵完成 */}
+      <Card className="mb-6" title={`Overdue tasks (${overdue.length})`} padded={false}
+        action={<Link to="/tasks/all?view=overdue" className="text-xs font-medium text-navy-700 hover:underline">All overdue →</Link>}>
+        <TaskList tasks={overdue.slice(0, 15)} today={today} onOpen={setOpenTask} testId="overdue-list" compact empty="Nothing is overdue. Well done." />
+      </Card>
+
+      <Card padded={false} title="Recurring schedules">
         {isLoading ? null : rules.length === 0 ? (
           <div className="px-6 py-10 text-center">
             <p className="text-sm font-medium text-slate-800">No recurring tasks yet</p>
@@ -81,6 +91,7 @@ export function RecurringPage() {
           </ul>
         )}
       </Card>
+      {openTask && <TaskFormModal task={openTask} onClose={() => setOpenTask(null)} />}
       {editing && <RuleFormModal rule={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {templates && <TemplatesModal existing={rules} onClose={() => setTemplates(false)} />}
     </>

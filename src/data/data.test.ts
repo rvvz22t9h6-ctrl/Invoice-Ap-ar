@@ -6,6 +6,7 @@ import { buildDashboard } from '@/domain/dashboard';
 import { computeInvoices } from '@/domain/invoice';
 import { invoiceFormSchema, paymentFormSchema } from '@/domain/validation';
 import { DemoRepository, memoryStore } from './demoRepository';
+import { newChecklist, toggleItem } from '@/domain/checklists';
 import { toDomainError } from './supabaseRepository';
 
 const TODAY = '2026-11-12';
@@ -281,6 +282,29 @@ describe('Tasks and recurring tasks', () => {
     await repo.signIn('boss@demo.my', 'demo1234');
     await expect(repo.saveTask({ title: 'x', category: 'AP', priority: 'Low', dueDate: TODAY })).rejects.toThrow(/read-only/);
     expect(await repo.generateTasks()).toBe(0);
+  });
+});
+
+describe('Payroll and closing checklists', () => {
+  it('saves one checklist per kind and month; viewer cannot save', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    let c = newChecklist('payroll', '2026-11', '2026-11-12T00:00:00Z');
+    c = toggleItem(c, 'epf', '2026-11-12T00:00:00Z');
+    await repo.saveChecklist(c);
+    await repo.saveChecklist(toggleItem(c, 'socso', '2026-11-12T01:00:00Z'));
+    const all = await repo.listChecklists();
+    expect(all).toHaveLength(1);
+    expect(all[0]!.items.filter((i) => i.done).map((i) => i.key)).toEqual(['epf', 'socso']);
+    await expect(repo.saveChecklist({ ...c, id: 'payroll-2026-12' })).rejects.toThrow(/Invalid/);
+    await repo.signIn('boss@demo.my', 'demo1234');
+    await expect(repo.saveChecklist(c)).rejects.toThrow(/read-only/);
+  });
+
+  it('keeps invoice remarks', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const inv = await repo.createInvoice('AR', form({ invoiceNumber: 'RM-1', remarks: 'Call on Friday' }));
+    expect(inv.remarks).toBe('Call on Friday');
+    expect((await repo.updateInvoice(inv.id, form({ invoiceNumber: 'RM-1', remarks: '' }))).remarks).toBe('');
   });
 });
 

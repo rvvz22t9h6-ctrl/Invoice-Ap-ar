@@ -60,6 +60,7 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
     invoiceDate: invoice?.invoiceDate ?? today,
     dueDate: invoice?.dueDate ?? addDays(today, type === 'AR' ? settings.defaultTermsAR : settings.defaultTermsAP),
     description: invoice?.description ?? '',
+    remarks: invoice?.remarks ?? '',
     invoiceAmount: invoice ? senToDecimalString(invoice.invoiceAmount) : '',
     taxAmount: invoice ? senToDecimalString(invoice.taxAmount) : '0.00',
   }));
@@ -261,6 +262,8 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
 
         <TextArea label="Description" containerClassName="sm:col-span-2" rows={2} maxLength={500} value={values.description} error={errors.description} hint={filledHint('description')}
           placeholder="What is this invoice for?" onChange={(e) => set('description', e.target.value)} />
+        <TextArea label="Remarks" containerClassName="sm:col-span-2" rows={2} maxLength={1000} value={values.remarks} error={errors.remarks}
+          placeholder="Follow-up notes, e.g. customer promised payment on Friday" onChange={(e) => set('remarks', e.target.value)} />
 
         <TextInput label="Invoice Amount (RM) *" inputMode="decimal" value={values.invoiceAmount} error={errors.invoiceAmount} hint={paidNote ?? filledHint('invoiceAmount')}
           placeholder="0.00" onChange={(e) => set('invoiceAmount', e.target.value)} />

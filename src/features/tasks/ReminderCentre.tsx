@@ -77,7 +77,7 @@ export function ReminderBell({ dark }: { dark?: boolean }) {
         <div className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 text-slate-900 shadow-xl" role="dialog" aria-label="Reminder Centre" data-testid="reminder-panel">
           <div className="mb-2 flex items-center justify-between px-1">
             <p className="font-display text-sm font-semibold">Reminder Centre</p>
-            <Link to="/tasks" onClick={() => setOpen(false)} className="text-xs font-medium text-navy-700 hover:underline">Open My Day</Link>
+            <Link to="/tasks" onClick={() => setOpen(false)} className="text-xs font-medium text-navy-700 hover:underline">Open Dashboard</Link>
           </div>
           <div className="max-h-[60vh] overflow-y-auto"><ReminderList reminders={reminders} onPick={() => setOpen(false)} /></div>
           <div className="mt-3 border-t border-slate-100 px-1 pt-3"><NotificationToggle /></div>
@@ -119,7 +119,7 @@ export function DailySummaryBanner() {
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-navy-900 px-4 py-3 text-sm text-white" role="status" data-testid="daily-summary">
       <p><strong className="font-semibold">Good to know today:</strong> {summary?.message}</p>
       <div className="flex gap-2">
-        <Link to="/tasks" className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-navy-900 hover:bg-navy-50">Open My Day</Link>
+        <Link to="/tasks" className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-navy-900 hover:bg-navy-50">Open Dashboard</Link>
         <button type="button" className="rounded-md px-2 py-1.5 text-xs text-navy-200 hover:text-white" onClick={() => { try { localStorage.setItem(SUMMARY_KEY, today); } catch { /* 略過 */ } setDismissed(true); }}>Dismiss for today</button>
       </div>
     </div>

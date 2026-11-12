@@ -13,6 +13,8 @@ import type { Task } from '@/domain/tasks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useTasks, useToday } from '@/hooks/useTasks';
 import { NotificationToggle, ReminderList } from './ReminderCentre';
+import { ChecklistStatusBadge, useChecklists } from '@/features/checklists/ChecklistPage';
+import { checklistId, checklistProgress, checklistStatus, defaultMonth, monthName, newChecklist } from '@/domain/checklists';
 import { QuickAdd, TaskFormModal, TaskList } from './TaskParts';
 
 export function MyDayPage() {
@@ -21,6 +23,7 @@ export function MyDayPage() {
   const { user } = useAuth();
   const [open, setOpen] = useState<Task | null>(null);
   const [creating, setCreating] = useState(false);
+  const { checklists } = useChecklists();
   const o = useMemo(() => buildTaskOverview(tasks, today), [tasks, today]);
   const reminders = useMemo(() => buildReminders(tasks, today), [tasks, today]);
   const p = useMemo(() => buildProductivity(tasks, today), [tasks, today]);
@@ -32,8 +35,29 @@ export function MyDayPage() {
 
   return (
     <>
-      <PageHeader eyebrow={`My Day · ${weekday}, ${formatDate(today)} (MYT)`} title="Daily Task & Reminder Centre"
-        subtitle="Every finance and payroll responsibility in one place. Unfinished tasks carry forward with their original due dates until you complete them." />
+      <PageHeader eyebrow={`${weekday}, ${formatDate(today)} (MYT)`} title="Dashboard"
+        subtitle="Your tasks for today. Unfinished tasks carry forward with their original due dates until you complete them." />
+
+      {/* 本月薪資與月結進度：一眼看到，點一下進入 */}
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="month-strip">
+        {(['payroll', 'closing'] as const).map((kind) => {
+          const month = defaultMonth(kind, today);
+          const c = checklists.find((x) => x.id === checklistId(kind, month)) ?? newChecklist(kind, month, '');
+          const pr = checklistProgress(c);
+          const st = checklistStatus(c, today);
+          return (
+            <Link key={kind} to={kind === 'payroll' ? '/payroll' : '/closing'} data-testid={`strip-${kind}`}
+              className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-navy-200 hover:bg-navy-50/40">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{kind === 'payroll' ? 'Payroll' : 'Monthly closing'} · {monthName(month)}</p>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className={st === 'Completed' ? 'h-full bg-emerald-600' : st === 'Overdue' ? 'h-full bg-red-500' : 'h-full bg-navy-600'} style={{ width: `${pr.pct}%` }} /></div>
+                <p className="mt-1 text-xs text-slate-500">{pr.pct}% · {pr.done} of {pr.total} steps · due {formatDate(c.dueDate)}</p>
+              </div>
+              <ChecklistStatusBadge status={st} />
+            </Link>
+          );
+        })}
+      </div>
 
       {canEdit && <Card className="mb-6"><QuickAdd /></Card>}
 

@@ -139,6 +139,7 @@ function invoiceColumns(type: InvoiceType): Col<ComputedInvoice>[] {
     ...(type === 'AP' ? [{ header: 'Approval', width: 16, type: 'text' as const, value: (i: ComputedInvoice) => (i.approvalStatus ? APPROVAL_LABEL[i.approvalStatus] : '') }] : []),
     { header: 'Days Overdue', width: 12, type: 'int', value: (i) => i.daysOverdue },
     { header: 'Last Payment', width: 13, type: 'date', value: (i) => i.lastPaymentDate },
+    { header: 'Remarks', width: 40, type: 'text', value: (i) => i.remarks ?? '' },
   ];
 }
 

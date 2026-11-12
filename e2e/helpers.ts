@@ -26,6 +26,19 @@ export async function login(page: Page, who: 'admin' | 'finance' | 'viewer') {
   const name = { admin: /Mei Ling/, finance: /Nurul Aina/, viewer: /Richard Wong/ }[who];
   await page.goto('/login');
   await page.getByRole('button', { name }).click();
+  await expect(page.getByTestId('task-kpi-today')).toBeVisible(); // 首頁 = 每日工作儀表板
+}
+
+/** 開啟側邊欄頁面；若在「More」裡且尚未展開，先展開。 */
+export async function openNav(page: Page, name: string) {
+  const link = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true });
+  if (!(await link.first().isVisible())) await page.locator('[data-testid=nav-more]:visible').first().click();
+  await link.first().click();
+}
+
+/** 開啟財務總覽（原本的首頁儀表板）。 */
+export async function openFinance(page: Page) {
+  await openNav(page, 'Finance Overview');
   await expect(page.getByTestId('kpi-ar-outstanding')).toBeVisible();
 }
 

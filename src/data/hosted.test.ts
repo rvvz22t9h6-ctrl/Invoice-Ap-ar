@@ -6,6 +6,7 @@ import { invoiceFormSchema, paymentFormSchema } from '@/domain/validation';
 import { todayIso } from '@/domain/dates';
 import { HostedRepository, shardInvoices, type HostedDb, type HostedUser } from './hostedRepository';
 import { buildInitialDemoState } from './demoRepository';
+import { newChecklist } from '@/domain/checklists';
 
 /** 模擬 db：文件存在 Map 中，並記錄寫入次數。 */
 function fakeDb() {
@@ -112,6 +113,17 @@ describe('HostedRepository tasks', () => {
     expect(tasks.some((t) => t.title === 'One-off')).toBe(true);
     expect(tasks.filter((t) => t.recurrenceId).length).toBeGreaterThan(0);
     expect(await again.generateTasks()).toBe(0); // 重新開啟不重複產生
+  });
+});
+
+describe('HostedRepository checklists', () => {
+  it('stores checklists per month and reloads them', async () => {
+    const { db, docs } = fakeDb();
+    const repo = await HostedRepository.create(db, owner);
+    await repo.saveChecklist(newChecklist('closing', '2026-10', '2026-11-12T00:00:00Z'));
+    await repo.whenSaved();
+    expect(docs.has('checklists/2026-10')).toBe(true);
+    expect((await (await HostedRepository.create(db, owner)).listChecklists())[0]!.id).toBe('closing-2026-10');
   });
 });
 

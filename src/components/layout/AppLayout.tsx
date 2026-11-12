@@ -5,7 +5,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { repository } from '@/data';
-import { DataBanners, DataManagerModal, downloadBackup, isLocalMode } from '@/features/data/DataManager';
+import { DataBanners, DataManagerModal, downloadBackup, isHosted, isLocalMode, useSaveStatus } from '@/features/data/DataManager';
 import { ROLE_LABEL } from '@/domain/types';
 import { formatDate } from '@/domain/dates';
 import logoUrl from '@/assets/logo.svg';
@@ -28,6 +28,8 @@ export function AppLayout() {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const hosted = isHosted();
+  const save = useSaveStatus();
   const location = useLocation();
   const toast = useToast();
 
@@ -56,10 +58,15 @@ export function AppLayout() {
       <div className="space-y-3 border-t border-white/10 px-5 py-4">
         {isLocalMode() && (
           <div className="rounded-lg bg-white/5 px-3 py-2.5 text-xs text-navy-200">
-            <p className="font-semibold text-white">Saved in this browser</p>
-            <p className="mt-0.5">Back up regularly to keep your data safe.</p>
+            {hosted ? (
+              <p className="flex items-center gap-1.5 font-semibold text-white" data-testid="save-status" aria-live="polite">
+                <span className={cx('size-2 rounded-full', save?.state === 'error' ? 'bg-red-400' : save?.state === 'saving' ? 'bg-amber-300' : 'bg-emerald-400')} aria-hidden />
+                {save?.state === 'error' ? 'Not saved' : save?.state === 'saving' ? 'Saving…' : 'All changes saved'}
+              </p>
+            ) : <p className="font-semibold text-white">Saved in this browser</p>}
+            <p className="mt-0.5">{hosted ? 'Stored in your Claude account.' : 'Back up regularly to keep your data safe.'}</p>
             <div className="mt-2 flex gap-3">
-              <button type="button" onClick={() => { downloadBackup(); toast('Backup downloaded'); }} className="font-medium text-white underline-offset-2 hover:underline">Backup</button>
+              <button type="button" onClick={async () => { if (await downloadBackup().catch(() => false)) toast('Backup downloaded'); }} className="font-medium text-white underline-offset-2 hover:underline">Backup</button>
               <button type="button" onClick={() => setDataOpen(true)} className="font-medium text-white underline-offset-2 hover:underline" data-testid="open-data-manager">My data…</button>
             </div>
           </div>
@@ -73,7 +80,7 @@ export function AppLayout() {
             <p className="text-xs text-navy-300">{user ? ROLE_LABEL[user.role] : ''}{user?.role === 'viewer' ? ' · read-only' : ''}</p>
           </div>
         </div>
-        <button type="button" onClick={signOut} className="w-full rounded-lg px-3 py-2 text-left text-sm text-navy-200 ring-1 ring-white/10 hover:bg-white/5 hover:text-white">Sign out</button>
+        {!hosted && <button type="button" onClick={signOut} className="w-full rounded-lg px-3 py-2 text-left text-sm text-navy-200 ring-1 ring-white/10 hover:bg-white/5 hover:text-white">Sign out</button>}
       </div>
     </div>
   );
@@ -84,7 +91,7 @@ export function AppLayout() {
       <aside className="fixed inset-y-0 left-0 hidden w-64 lg:block">{sidebar}</aside>
 
       {/* 手機版頂部列 */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 bg-navy-900 px-4 py-3 text-white lg:hidden">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center gap-3 bg-navy-900 px-4 py-3 text-white lg:hidden">
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>

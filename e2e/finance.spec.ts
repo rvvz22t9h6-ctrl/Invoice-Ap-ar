@@ -402,8 +402,8 @@ test.describe('My data (saved in this browser)', () => {
 
     // 1. 清除範例資料
     await page.getByRole('button', { name: 'Start with my own data…' }).click();
-    page.once('dialog', (d) => d.accept());
     await page.getByTestId('start-fresh').click();
+    await page.getByTestId('confirm-data-action').click();
     await expect(page.getByTestId('sample-banner')).toHaveCount(0);
     await expect(kpi(page, 'kpi-ar-outstanding')).toHaveText('RM 0.00');
 
@@ -424,12 +424,12 @@ test.describe('My data (saved in this browser)', () => {
 
     // 4. 刪除全部 → 由備份還原
     await page.getByTestId('open-data-manager').click();
-    page.once('dialog', (d) => d.accept());
     await page.getByTestId('start-fresh').click();
+    await page.getByTestId('confirm-data-action').click();
     await expect(page.getByText('No accounts receivable invoices yet')).toBeVisible();
     await page.getByTestId('open-data-manager').click();
-    page.once('dialog', (d) => d.accept());
     await page.getByTestId('restore-input').setInputFiles(backupPath);
+    await page.getByTestId('confirm-data-action').click();
     await expect(page.getByText('Backup restored')).toBeVisible();
     await expect(page.getByTestId('invoice-table')).toContainText('INV-0001');
 

@@ -12,7 +12,7 @@ import type { IsoDate } from '@/domain/dates';
 import type { ActivityEntry, ApprovalStatus, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 
-export type DataMode = 'supabase' | 'demo';
+export type DataMode = 'supabase' | 'demo' | 'hosted';
 
 export interface Repository {
   readonly mode: DataMode;

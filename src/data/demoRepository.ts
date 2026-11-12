@@ -26,7 +26,7 @@ export const DEMO_USERS: (UserProfile & { password: string; description: string 
   { id: 'demo-viewer', email: 'boss@demo.my', fullName: 'Dato\' Richard Wong (Director)', role: 'viewer', password: 'demo1234', description: 'Read-only management view' },
 ];
 
-interface DemoState {
+export interface DemoState {
   version: number;
   counterparties: Counterparty[];
   invoices: Omit<Invoice, 'counterpartyName'>[];
@@ -45,7 +45,7 @@ interface BackupFile {
   data: DemoState;
 }
 
-const STATE_VERSION = 1;
+export const STATE_VERSION = 1;
 
 /** 簡易儲存介面，方便測試時替換。 */
 export interface KeyValueStore {
@@ -95,9 +95,9 @@ export function buildInitialDemoState(today: IsoDate): DemoState {
 }
 
 export class DemoRepository implements Repository {
-  readonly mode = 'demo' as const;
-  private state: DemoState;
-  private user: UserProfile | null = null;
+  readonly mode: 'demo' | 'hosted' = 'demo';
+  protected state: DemoState;
+  protected user: UserProfile | null = null;
   private static readonly DATA_KEY = 'invoice-ap-ar:demo-data';
   private static readonly USER_KEY = 'invoice-ap-ar:demo-user';
   private static readonly BACKUP_KEY = 'invoice-ap-ar:last-backup';
@@ -130,7 +130,7 @@ export class DemoRepository implements Repository {
     return fresh;
   }
 
-  private save(state = this.state) {
+  protected save(state = this.state) {
     this.store.setItem(DemoRepository.DATA_KEY, JSON.stringify(state));
   }
 
@@ -140,14 +140,14 @@ export class DemoRepository implements Repository {
     this.save();
   }
 
-  private delay<T>(value: T): Promise<T> {
+  protected delay<T>(value: T): Promise<T> {
     // 回傳深拷貝，避免畫面意外修改內部狀態
     const copy = structuredClone(value);
     return this.latencyMs ? new Promise((r) => setTimeout(() => r(copy), this.latencyMs)) : Promise.resolve(copy);
   }
 
   /** 權限檢查：與資料庫 RLS 相同。 */
-  private require(...roles: UserProfile['role'][]): UserProfile {
+  protected require(...roles: UserProfile['role'][]): UserProfile {
     if (!this.user) throw new DomainError('FORBIDDEN', 'Please sign in');
     if (roles.length && !roles.includes(this.user.role)) {
       throw new DomainError('FORBIDDEN', this.user.role === 'viewer' ? 'You have read-only access' : 'Only an admin can do this');

@@ -3,15 +3,20 @@
  */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, HashRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter, MemoryRouter } from 'react-router-dom';
+import { initRepository } from '@/data';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import App from './App';
 import './index.css';
 
-// 單一 HTML 檔版本（以 file:// 開啟）必須使用 HashRouter（網址為 #/ap 形式）
-const Router = import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRouter;
+// 路由方式：
+//   單一 HTML 檔（file://）→ HashRouter（#/ap）
+//   claude.ai Artifact     → MemoryRouter（平台不允許 #/path 形式的網址）
+//   一般網站               → BrowserRouter
+const Router = import.meta.env.VITE_HOST === 'artifact' ? MemoryRouter
+  : import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRouter;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +25,21 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
+const root = createRoot(document.getElementById('root')!);
+
+/** 連線失敗時的畫面。 */
+function StartupError({ message }: { message: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-white px-4">
+      <div className="max-w-md rounded-xl border border-slate-200 p-6 text-center">
+        <p className="text-base font-semibold text-slate-900">Your finance data could not be loaded</p>
+        <p className="mt-2 text-sm text-slate-600">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+initRepository().then(() => root.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <Router>
@@ -32,4 +51,4 @@ createRoot(document.getElementById('root')!).render(
       </Router>
     </QueryClientProvider>
   </StrictMode>,
-);
+), (e: unknown) => root.render(<StartupError message={e instanceof Error ? e.message : 'Please reload the page.'} />));

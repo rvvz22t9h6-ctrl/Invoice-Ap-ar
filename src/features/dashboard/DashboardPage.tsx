@@ -14,6 +14,8 @@ import { dueDescription } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import type { ComputedInvoice } from '@/domain/types';
 import { useActivity, useInvoices } from '@/hooks/useFinanceData';
+import { can } from '@/domain/permissions';
+import { useAuth } from '@/features/auth/AuthContext';
 import { InvoiceDetailModal } from '@/features/invoices/InvoiceDetailModal';
 import { TrendChart } from './TrendChart';
 import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
@@ -22,6 +24,7 @@ import { buildFullReport } from '@/lib/excelExport';
 export function DashboardPage() {
   const { invoices, today, isLoading, error } = useInvoices();
   const activity = useActivity({ limit: 10 });
+  const { user } = useAuth();
   const [openId, setOpenId] = useState<string | null>(null);
 
   const d = useMemo(() => buildDashboard(invoices, today), [invoices, today]);
@@ -37,6 +40,23 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" subtitle="Live position of payables and receivables, calculated from invoice and payment records."
         actions={<ExportExcelButton variant="primary" label="Export full report to Excel" testId="export-full-report"
           fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today)} disabled={!invoices.length} />} />
+
+      {invoices.length === 0 && (
+        <section className="mb-6 rounded-xl border border-navy-100 bg-navy-50 p-6" data-testid="welcome">
+          <h2 className="text-lg font-semibold text-navy-900">Welcome. Add your first invoice to get started.</h2>
+          <p className="mt-1 max-w-2xl text-sm text-navy-800">
+            Enter supplier bills under Accounts Payable and customer invoices under Accounts Receivable, then record payments as they happen.
+            Every total below updates automatically, and <strong>Export full report to Excel</strong> turns it into a workbook for management.
+          </p>
+          {can(user?.role, 'invoice.create') && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link to="/ar?new=1" className="rounded-lg bg-navy-800 px-3.5 py-2 text-sm font-medium text-white hover:bg-navy-700">+ New customer invoice (AR)</Link>
+              <Link to="/ap?new=1" className="rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-navy-800 ring-1 ring-navy-200 hover:bg-navy-50">+ New supplier invoice (AP)</Link>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-navy-700">Want to explore first? Open <strong>My data…</strong> in the sidebar and choose <strong>Load sample data</strong>.</p>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard testId="kpi-ar-outstanding" accent="ar" label="Total AR Outstanding" value={formatMYR(d.AR.outstanding)} hint={`${plural(d.AR.outstandingCount, 'unpaid customer invoice')}`} />

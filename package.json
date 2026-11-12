@@ -15,7 +15,8 @@
     "test:e2e": "playwright test --trace off",
     "seed:generate": "vite-node scripts/generate-seed.ts",
     "test:all": "npm run typecheck && npm test && npm run test:e2e",
-    "build:file": "tsc -p tsconfig.json && vite build --mode file --outDir dist-file && node -e \"require('fs').renameSync('dist-file/index.html','dist-file/InvoiceTracker.html')\""
+    "build:file": "tsc -p tsconfig.json && vite build --mode file --outDir dist-file && node -e \"require('fs').renameSync('dist-file/index.html','dist-file/InvoiceTracker.html')\"",
+    "build:artifact": "tsc -p tsconfig.json && vite build --mode artifact --outDir dist-artifact && node scripts/package-artifact.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -35,7 +35,8 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   const { invoices, today, isLoading, error } = useInvoices();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const [creating, setCreating] = useState(false);
+  // 從儀表板「新增發票」連結進入時（?new=1）直接開啟表單
+  const [creating, setCreating] = useState(() => params.get('new') === '1' && can(user?.role, 'invoice.create'));
   const [openId, setOpenId] = useState<string | null>(null);
 
   // 篩選條件以 React state 為準（同步更新，連續快速操作也不會遺失），
@@ -76,8 +77,8 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
     overdue: sumSen(rows.filter((r) => r.isOverdue).map((r) => r.outstandingBalance)),
   }), [rows]);
 
-  const exportCsv = () => {
-    downloadTextFile(invoicesToCsv(rows, type), csvFileName(type, today));
+  const exportCsv = async () => {
+    try { await downloadTextFile(invoicesToCsv(rows, type), csvFileName(type, today)); } catch { return; }
     toast(`Exported ${rows.length} invoice${rows.length === 1 ? '' : 's'} to CSV`);
   };
 

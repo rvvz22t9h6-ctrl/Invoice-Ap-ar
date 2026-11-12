@@ -18,8 +18,9 @@ export default defineConfig({
     timeout: 60_000,
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testIgnore: /(mobile|single-file)\.spec\.ts/ },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testIgnore: /(mobile|single-file|hosted)\.spec\.ts/ },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec\.ts/ },
     { name: 'single-file', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testMatch: /single-file\.spec\.ts/ },
+    { name: 'hosted', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testMatch: /hosted\.spec\.ts/ },
   ],
 });

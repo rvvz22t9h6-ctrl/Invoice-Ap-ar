@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import type { Workbook } from 'exceljs';
 import { downloadWorkbook } from '@/lib/excelExport';
+import { isDeclined } from '@/lib/download';
 import { Button } from './index';
 import { useToast } from './Toast';
 
@@ -18,7 +19,8 @@ export function ExportExcelButton({ build, fileName, label = 'Export to Excel', 
       await downloadWorkbook(await build(), fileName);
       toast(`Downloaded ${fileName}`);
     } catch (e) {
-      toast(e instanceof Error ? `Export failed: ${e.message}` : 'Export failed', 'error');
+      if (isDeclined(e)) return;
+      toast(`Export failed: ${(e as { message?: string })?.message ?? 'unknown error'}`, 'error');
     } finally {
       setBusy(false);
     }

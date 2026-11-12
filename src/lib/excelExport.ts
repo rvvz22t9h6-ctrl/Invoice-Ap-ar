@@ -14,6 +14,7 @@ import type { Workbook, Worksheet } from 'exceljs';
 import { AGING_BUCKETS, buildAgingReport, type AgingReport } from '@/domain/aging';
 import { buildDashboard } from '@/domain/dashboard';
 import { formatDate, formatMonth } from '@/domain/dates';
+import { saveFile } from './download';
 import { APPROVAL_LABEL, TYPE_LABELS, type ComputedInvoice, type InvoiceType } from '@/domain/types';
 
 const NAVY = 'FF0F1F3D';
@@ -268,15 +269,8 @@ export async function buildAgingWorkbook(report: AgingReport): Promise<Workbook>
   return wb;
 }
 
-/** 在瀏覽器中下載活頁簿。 */
+/** 下載活頁簿（一般瀏覽器或 claude.ai 皆可）。 */
 export async function downloadWorkbook(wb: Workbook, fileName: string) {
   const buffer = await wb.xlsx.writeBuffer();
-  const url = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await saveFile(fileName, new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }

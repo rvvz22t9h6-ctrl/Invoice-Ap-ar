@@ -36,6 +36,14 @@ and overdue. Every figure is calculated live from invoice and payment records.
 
 Permissions are enforced **in the database** (Row Level Security + triggers), not just hidden in the UI.
 
+## Hosted on claude.ai (recommended)
+
+`npm run build:artifact` produces `dist-artifact/finance-portal.html`, published as a private claude.ai
+Artifact. Data is saved automatically to the artifact's cloud database (`db` capability), in month-sized
+documents (`invoices/<YYYY-MM>`, plus `meta/counterparties`, `meta/activity`, `meta/info`). The owner gets
+full access; anyone the page is shared with gets the read-only Viewer role. Downloads (Excel, CSV,
+backups) go through the platform's download confirmation.
+
 ## Using it on your own computer (no server, no account)
 
 1. Run `npm install` then `npm run build:file`. This creates **`dist-file/InvoiceTracker.html`**: one file with everything inside.

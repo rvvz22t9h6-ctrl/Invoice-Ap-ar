@@ -29,11 +29,11 @@ export function AgingPage() {
 
   if (isLoading) return <div className="grid h-64 place-items-center text-slate-400"><Spinner /></div>;
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     const header = [L.party, ...AGING_BUCKETS.map((b) => `${b.label} (MYR)`), 'Total Outstanding (MYR)'];
     const body = report.byCounterparty.map((r) => [r.counterpartyName, ...AGING_BUCKETS.map((b) => senToDecimalString(r.buckets[b.key])), senToDecimalString(r.total)]);
     const foot = ['TOTAL', ...AGING_BUCKETS.map((b) => senToDecimalString(report.buckets[b.key].amount)), senToDecimalString(report.total.amount)];
-    downloadTextFile(toCsv([header, ...body, foot]), `${type}-aging-${today}.csv`);
+    try { await downloadTextFile(toCsv([header, ...body, foot]), `${type}-aging-${today}.csv`); } catch { return; }
     toast('Aging report exported');
   };
 

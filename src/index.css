@@ -1,0 +1,32 @@
+/*
+ * 全域樣式：Tailwind v4 + 設計代號（design tokens）
+ * 色彩：白色背景、海軍藍導覽列；AR 藍、AP 橘（已通過色盲辨識度驗證）。
+ */
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* 品牌海軍藍（導覽列與主要按鈕） */
+  --color-navy-50: #f1f4fa;
+  --color-navy-100: #dfe6f3;
+  --color-navy-200: #bccbe6;
+  --color-navy-300: #8ea6d2;
+  --color-navy-500: #3d5f9e;
+  --color-navy-600: #2c4a85;
+  --color-navy-700: #1f3a6d;
+  --color-navy-800: #162b54;
+  --color-navy-900: #0f1f3d;
+  --color-navy-950: #0a1530;
+
+  /* 資料系列顏色：AR 與 AP */
+  --color-series-ar: #2a78d6;
+  --color-series-ap: #eb6834;
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-white text-slate-900; font-feature-settings: "cv11", "ss01"; }
+  /* 金額欄位使用等寬數字，方便上下對齊比較 */
+  .tabular { font-variant-numeric: tabular-nums; }
+}

@@ -157,6 +157,7 @@ test.describe('Accounts Receivable', () => {
     const dialog = page.getByRole('dialog');
     const paidText = await dialog.getByTestId('detail-amount-received').textContent();
     await dialog.getByTestId('edit-invoice').click();
+    await expect(page.getByRole('dialog')).toContainText('Edit invoice'); // 等待編輯表單完全取代明細
     await page.getByRole('dialog').getByLabel('Tax rate').selectOption('custom');
     await page.getByRole('dialog').getByLabel('Tax Amount (RM)').fill('0');
     await page.getByRole('dialog').getByLabel('Invoice Amount (RM) *').fill('1');

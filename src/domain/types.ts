@@ -43,6 +43,16 @@ export interface Payment {
   createdByName: string | null;
 }
 
+/** 附件（發票 PDF 或照片）。檔案本身存在平台的 assets，這裡只記錄指標與資訊。 */
+export interface Attachment {
+  /** 平台 asset id（長期有效的指標）。 */
+  id: string;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
 /** 發票主檔（含其付款紀錄）。 */
 export interface Invoice {
   id: string;
@@ -63,6 +73,8 @@ export interface Invoice {
   updatedAt: string;
   createdByName: string | null;
   payments: Payment[];
+  /** 附件；舊資料可能沒有此欄位。 */
+  attachments?: Attachment[];
 }
 
 /** 經計算後的發票（畫面與報表使用）。 */

@@ -30,7 +30,25 @@ async function open(page: Page, role: 'owner' | 'viewer' = 'owner') {
     const saved: { filename: string; size: number }[] = [];
     (window as unknown as { __saved: unknown }).__saved = saved;
     const downloads = { save: async ({ filename, data }: { filename: string; data: Blob }) => { saved.push({ filename, size: data.size }); return { status: 'saved' }; } };
-    const caps: Record<string, unknown> = { db, user, downloads };
+    // 模擬附件儲存與 Claude 擷取：記錄收到的提示文字與圖片數量
+    const calls: { prompt: string; images: number }[] = [];
+    const deleted: string[] = [];
+    (window as unknown as { __calls: unknown; __deleted: unknown }).__calls = calls;
+    (window as unknown as { __deleted: unknown }).__deleted = deleted;
+    let n = 0;
+    const assets = r === 'owner' ? {
+      upload: async (blob: Blob, o?: { type?: string }) => { n += 1; const id = String(n).padStart(32, 'a'); return { id, url: `/_blob/${id}`, sizeBytes: blob.size, contentType: o?.type ?? blob.type }; },
+      delete: async (id: string) => { deleted.push(id); return { deleted: true }; },
+    } : null;
+    const sample = {
+      limits: async () => ({ maxPromptBytes: 262144, images: { maxCount: 5, maxInputBytes: 20_000_000, mediaTypes: ['image/png', 'image/jpeg'] } }),
+      json: async (prompt: string, opts?: { images?: Blob[] }) => {
+        calls.push({ prompt, images: opts?.images?.length ?? 0 });
+        return { invoiceNumber: 'KKJ-INV-7788', counterpartyName: 'Kilang Kotak Jaya Sdn Bhd', invoiceDate: '2026-10-15', dueDate: null, paymentTermsDays: 30,
+          description: 'Corrugated carton boxes (2,000 pcs)', subtotal: 4800, taxAmount: 480, total: 5280, currency: 'MYR' };
+      },
+    };
+    const caps: Record<string, unknown> = { db, user, downloads, assets, sample };
     (window as unknown as { claude: unknown }).claude = { use: async (n: string) => caps[n] ?? null };
     // 平台不支援 confirm()：模擬其行為（立即回傳 false）
     window.confirm = () => false;
@@ -93,4 +111,64 @@ test('shared viewer is read-only', async ({ page }) => {
   await expect(page.getByRole('link', { name: '+ New customer invoice (AR)' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Accounts Payable' }).click();
   await expect(page.getByTestId('new-invoice')).toHaveCount(0);
+});
+
+test('upload a PDF invoice: details fill in automatically, file is attached on save', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open(page);
+  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByTestId('read-note')).toContainText('Details filled in from sample-supplier-invoice.pdf', { timeout: 20_000 });
+
+  // PDF.js 讀到的文字與第 1 頁圖片都送去擷取
+  const calls = await page.evaluate(() => (window as unknown as { __calls: { prompt: string; images: number }[] }).__calls);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.prompt).toContain('KKJ-INV-7788');
+  expect(calls[0]!.prompt).toContain('SELLER');
+  expect(calls[0]!.images).toBe(1);
+
+  // 表單已自動填好
+  await expect(dialog.getByLabel('Invoice Number *')).toHaveValue('KKJ-INV-7788');
+  await expect(dialog.getByLabel('Supplier Name *')).toHaveValue('Kilang Kotak Jaya Sdn Bhd');
+  await expect(dialog.getByLabel('Invoice Date *')).toHaveValue('2026-10-15');
+  await expect(dialog.getByLabel('Due Date *')).toHaveValue('2026-11-14');
+  await expect(dialog.getByLabel('Invoice Amount (RM) *')).toHaveValue('4800.00');
+  await expect(dialog.getByLabel('Tax rate')).toHaveValue('10');
+  await expect(dialog.getByTestId('form-total')).toHaveText('RM 5,280.00');
+  await expect(dialog.getByText('✓ From attachment', { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByTestId('attachment-list')).toContainText('sample-supplier-invoice.pdf');
+
+  await dialog.getByTestId('save-invoice').click();
+  const detail = page.getByRole('dialog');
+  await expect(detail).toContainText('KKJ-INV-7788');
+  await expect(detail.getByTestId('attachment-list')).toContainText('sample-supplier-invoice.pdf');
+  await expect(detail).toContainText('Attached sample-supplier-invoice.pdf to AP invoice KKJ-INV-7788');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('has-attachment')).toBeVisible();
+
+  // 重新載入後附件仍在；再次上傳同一張發票會提示重複
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await expect(page.getByTestId('has-attachment')).toBeVisible();
+  await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
+  await expect(page.getByRole('dialog').getByText(/already in the system/)).toBeVisible({ timeout: 20_000 });
+  // 取消 → 剛上傳的檔案被刪除
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __deleted: string[] }).__deleted.length)).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test('remove an attachment from an invoice', async ({ page }) => {
+  await open(page);
+  await page.getByRole('link', { name: 'Accounts Payable' }).click();
+  await page.getByTestId('upload-invoice-input').setInputFiles('e2e/fixtures/sample-supplier-invoice.pdf');
+  await expect(page.getByRole('dialog').getByTestId('read-note')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('dialog').getByTestId('save-invoice').click();
+  await page.getByRole('dialog').getByTestId('attachment-list').getByRole('button', { name: /Remove/ }).click();
+  await page.getByTestId('confirm-remove-attachment').click();
+  await expect(page.getByRole('dialog').getByTestId('attachment-list')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toContainText('Removed attachment sample-supplier-invoice.pdf');
 });

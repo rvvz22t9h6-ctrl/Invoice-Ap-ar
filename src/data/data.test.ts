@@ -166,6 +166,26 @@ describe('Local data: start fresh, backup and restore', () => {
   });
 });
 
+describe('Attachments', () => {
+  it('records and removes attachments, logs them and keeps them in backups', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const inv = await repo.createInvoice('AP', form({ invoiceNumber: 'ATT-1' }));
+    const att = { id: 'a'.repeat(32), name: 'bill.pdf', contentType: 'application/pdf', sizeBytes: 1234, uploadedAt: '2026-11-12T00:00:00Z' };
+    await repo.addAttachment(inv.id, att);
+    expect((await repo.listInvoices()).find((i) => i.id === inv.id)!.attachments).toEqual([att]);
+    expect((await repo.listActivity({ invoiceId: inv.id }))[0]!.summary).toBe('Attached bill.pdf to AP invoice ATT-1 · New Supplier Sdn Bhd');
+    expect(JSON.parse(repo.exportBackup()).data.invoices.find((i: { id: string }) => i.id === inv.id).attachments).toHaveLength(1);
+    await repo.removeAttachment(inv.id, att.id);
+    expect((await repo.listInvoices()).find((i) => i.id === inv.id)!.attachments).toEqual([]);
+  });
+
+  it('viewer cannot attach', async () => {
+    await repo.signIn('boss@demo.my', 'demo1234');
+    const [first] = await repo.listInvoices();
+    await expect(repo.addAttachment(first!.id, { id: 'x', name: 'x.pdf', contentType: 'application/pdf', sizeBytes: 1, uploadedAt: '' })).rejects.toThrow(/read-only/);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

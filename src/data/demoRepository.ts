@@ -10,7 +10,7 @@
 import { addDays, todayIso, type IsoDate } from '@/domain/dates';
 import { computeInvoice } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
-import type { ActivityEntry, ApprovalStatus, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
+import type { ActivityEntry, ApprovalStatus, Attachment, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
 import { kindForType } from '@/domain/types';
 import {
   assertCanCancel, assertCanRecordPayment, assertNotDuplicate, assertTotalCoversPaid, DomainError,
@@ -335,6 +335,26 @@ export class DemoRepository implements Repository {
     const p = inv.payments.find((x) => x.id === paymentId)!;
     inv.payments = inv.payments.filter((x) => x.id !== paymentId);
     this.log(inv.id, 'payment.reversed', `Reversed ${inv.type === 'AR' ? 'collection of' : 'payment of'} ${formatMYR(p.amount)} on ${this.label(inv)}`);
+    this.commit();
+  }
+
+  async addAttachment(invoiceId: string, attachment: Attachment) {
+    this.require('admin', 'finance');
+    const inv = this.find(invoiceId);
+    inv.attachments = [...(inv.attachments ?? []).filter((a) => a.id !== attachment.id), attachment];
+    inv.updatedAt = new Date().toISOString();
+    this.log(inv.id, 'attachment.added', `Attached ${attachment.name} to ${this.label(inv)}`);
+    this.commit();
+  }
+
+  async removeAttachment(invoiceId: string, attachmentId: string) {
+    this.require('admin', 'finance');
+    const inv = this.find(invoiceId);
+    const att = (inv.attachments ?? []).find((a) => a.id === attachmentId);
+    if (!att) return;
+    inv.attachments = (inv.attachments ?? []).filter((a) => a.id !== attachmentId);
+    inv.updatedAt = new Date().toISOString();
+    this.log(inv.id, 'attachment.removed', `Removed attachment ${att.name} from ${this.label(inv)}`);
     this.commit();
   }
 

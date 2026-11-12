@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { repository } from '@/data';
 import { computeInvoices } from '@/domain/invoice';
-import type { ApprovalStatus, CounterpartyKind, InvoiceType } from '@/domain/types';
+import type { ApprovalStatus, Attachment, CounterpartyKind, InvoiceType } from '@/domain/types';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 
 export const queryKeys = {
@@ -62,5 +62,7 @@ export function useInvoiceMutations() {
     remove: m((id: string) => repository.deleteInvoice(id)),
     recordPayment: m((id: string, v: PaymentFormValues) => repository.recordPayment(id, v)),
     reversePayment: m((paymentId: string) => repository.reversePayment(paymentId)),
+    addAttachment: m((id: string, a: Attachment) => repository.addAttachment!(id, a)),
+    removeAttachment: m((id: string, attachmentId: string) => repository.removeAttachment!(id, attachmentId)),
   };
 }

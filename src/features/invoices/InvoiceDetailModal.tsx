@@ -14,7 +14,9 @@ import { formatDate, formatDateTime } from '@/domain/dates';
 import { dueDescription } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import { can } from '@/domain/permissions';
-import { TYPE_LABELS, type ApprovalStatus } from '@/domain/types';
+import { TYPE_LABELS, type ApprovalStatus, type Attachment } from '@/domain/types';
+import { attachmentsEnabled, autoFillEnabled, deleteAttachmentFile } from '@/lib/attachments';
+import { AttachmentDrop, AttachmentList } from './AttachmentDrop';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useActivity, useInvoiceMutations, useInvoices } from '@/hooks/useFinanceData';
 import { InvoiceFormModal } from './InvoiceFormModal';
@@ -22,7 +24,8 @@ import { PaymentFormModal } from './PaymentFormModal';
 
 type View =
   | { kind: 'detail' }
-  | { kind: 'edit' }
+  | { kind: 'edit'; file?: File }
+  | { kind: 'removeAttachment'; attachment: Attachment }
   | { kind: 'pay' }
   | { kind: 'cancel' }
   | { kind: 'delete' }
@@ -61,7 +64,21 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
   };
 
   // ---------- 子對話框 ----------
-  if (view.kind === 'edit') return <InvoiceFormModal open type={invoice.type} invoice={invoice} onClose={back} />;
+  if (view.kind === 'edit') return <InvoiceFormModal open type={invoice.type} invoice={invoice} onClose={back} initialFile={view.file} />;
+
+  if (view.kind === 'removeAttachment') {
+    const att = view.attachment;
+    return (
+      <Modal open onClose={back} size="sm" title={`Remove ${att.name}?`}
+        footer={<><Button onClick={back}>Keep it</Button>
+          <Button variant="danger" data-testid="confirm-remove-attachment" loading={m.removeAttachment.isPending}
+            onClick={() => run(async () => { await m.removeAttachment.mutateAsync([invoice.id, att.id]); await deleteAttachmentFile(att.id); }, 'Attachment removed')}>
+            Remove attachment</Button></>}>
+        <p className="text-sm text-slate-600">The file is deleted permanently. The invoice details stay as they are.</p>
+        {error && <div className="mt-3"><Alert>{error}</Alert></div>}
+      </Modal>
+    );
+  }
   if (view.kind === 'pay') return <PaymentFormModal open invoice={invoice} onClose={back} />;
 
   if (view.kind === 'cancel') {
@@ -101,6 +118,8 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
   const canPay = can(role, 'payment.record') && !invoice.isCancelled && invoice.outstandingBalance > 0
     && (invoice.type === 'AR' || invoice.approvalStatus === 'approved');
   const needsApproval = invoice.type === 'AP' && invoice.approvalStatus !== 'approved' && !invoice.isCancelled;
+  const attachments = invoice.attachments ?? [];
+  const canAttachHere = attachmentsEnabled() && can(role, 'invoice.edit') && !invoice.isCancelled;
   const approve = (s: ApprovalStatus) => run(() => m.setApproval.mutateAsync([invoice.id, s]), s === 'approved' ? 'Invoice approved' : 'Invoice rejected');
 
   return (
@@ -156,6 +175,21 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
         <div><dt className="text-xs text-slate-500">Last Payment</dt><dd className="font-medium">{formatDate(invoice.lastPaymentDate)}</dd></div>
         {invoice.description && <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-slate-500">Description</dt><dd>{invoice.description}</dd></div>}
       </dl>
+
+      {/* 附件 */}
+      {(attachments.length > 0 || canAttachHere) && (
+        <>
+          <h3 className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Attachments ({attachments.length})</h3>
+          <div className="space-y-2">
+            <AttachmentList items={attachments} onRemove={canAttachHere ? (a) => setView({ kind: 'removeAttachment', attachment: a }) : undefined} />
+            {canAttachHere && (
+              <AttachmentDrop onFile={(f) => setView({ kind: 'edit', file: f })}
+                label={autoFillEnabled() ? 'Upload invoice and update the details' : 'Attach a file'}
+                hint={autoFillEnabled() ? 'The edit form opens with the details read from the file, for you to check and save.' : 'PDF, JPG, PNG or WebP, up to 20 MB.'} />
+            )}
+          </div>
+        </>
+      )}
 
       {/* 付款紀錄 */}
       <h3 className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{invoice.type === 'AR' ? 'Collections' : 'Payments'} ({invoice.payments.length})</h3>

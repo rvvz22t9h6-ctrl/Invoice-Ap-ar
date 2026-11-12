@@ -7,7 +7,7 @@
  *   - 欄位排序、分頁、合計列
  *   - 匯出 CSV（匯出「目前篩選後」的資料）
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ApprovalBadge, Button, Card, FilterSelect, PageHeader, Spinner, StatusBadge } from '@/components/ui';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -25,6 +25,7 @@ import { InvoiceDetailModal } from './InvoiceDetailModal';
 import { InvoiceFormModal } from './InvoiceFormModal';
 import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
 import { buildInvoiceListWorkbook } from '@/lib/excelExport';
+import { ACCEPT_ATTR, attachmentsEnabled } from '@/lib/attachments';
 
 /** 「未付清」= 未取消且有未付餘額（含 Pending、Partially Paid、Overdue）。 */
 const OUTSTANDING = 'Outstanding';
@@ -38,6 +39,8 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   // 從儀表板「新增發票」連結進入時（?new=1）直接開啟表單
   const [creating, setCreating] = useState(() => params.get('new') === '1' && can(user?.role, 'invoice.create'));
   const [openId, setOpenId] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
 
   // 篩選條件以 React state 為準（同步更新，連續快速操作也不會遺失），
   // 並同步寫回網址參數，方便分享連結或重新整理後保留。
@@ -83,7 +86,10 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   };
 
   const columns: Column<ComputedInvoice>[] = [
-    { key: 'invoiceNumber', header: 'Invoice No.', sortValue: (r) => r.invoiceNumber, render: (r) => <span className="whitespace-nowrap"><span className="font-medium text-navy-800">{r.invoiceNumber}</span><span className="block text-xs text-slate-500 2xl:hidden">{formatDate(r.invoiceDate)}</span></span>, footer: `${rows.length} invoices` },
+    { key: 'invoiceNumber', header: 'Invoice No.', sortValue: (r) => r.invoiceNumber, render: (r) => <span className="whitespace-nowrap"><span className="font-medium text-navy-800">{r.invoiceNumber}</span>{(r.attachments?.length ?? 0) > 0 && (
+      <span className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-xs text-slate-500" title={`${r.attachments!.length} attachment(s)`} data-testid="has-attachment">
+        <svg viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden><path d="m13.5 7-5.8 5.8a1.8 1.8 0 0 0 2.5 2.5l6.3-6.3a3.5 3.5 0 0 0-5-5L5 10.5a5.3 5.3 0 0 0 7.5 7.5L17 13.5" strokeLinecap="round" /></svg>
+        {r.attachments!.length}<span className="sr-only"> attachments</span></span>)}<span className="block text-xs text-slate-500 2xl:hidden">{formatDate(r.invoiceDate)}</span></span>, footer: `${rows.length} invoices` },
     {
       key: 'party', header: L.party, sortValue: (r) => r.counterpartyName,
       render: (r) => <><span className="font-medium text-slate-900">{r.counterpartyName}</span>{r.description && <span className="block max-w-[16rem] truncate text-xs text-slate-500">{r.description}</span>}</>,
@@ -121,7 +127,17 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
           <ExportExcelButton testId="export-excel" fileName={`${type}-invoices-${today}.xlsx`} build={() => buildInvoiceListWorkbook(rows, type)} disabled={!rows.length} />
           <Button onClick={exportCsv} disabled={!rows.length} data-testid="export-csv"
             icon={<svg viewBox="0 0 20 20" className="size-4" fill="currentColor" aria-hidden><path d="M10 3v8.6l3.3-3.3 1.1 1.1L10 14.8 5.6 9.4l1.1-1.1L10 11.6V3zM4 15h12v2H4z" /></svg>}>CSV</Button>
-          {can(user?.role, 'invoice.create') && <Button variant="primary" onClick={() => setCreating(true)} data-testid="new-invoice">+ {L.newInvoice}</Button>}
+          {can(user?.role, 'invoice.create') && attachmentsEnabled() && (
+            <>
+              <Button onClick={() => uploadRef.current?.click()} data-testid="upload-invoice"
+                icon={<svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden><path d="M10 13V4m0 0L6.5 7.5M10 4l3.5 3.5M4 13v3h12v-3" strokeLinecap="round" strokeLinejoin="round" /></svg>}>
+                Upload invoice
+              </Button>
+              <input ref={uploadRef} type="file" accept={ACCEPT_ATTR} className="hidden" id={`upload-${type}`} data-testid="upload-invoice-input"
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setUploadFile(f); setCreating(true); } }} />
+            </>
+          )}
+          {can(user?.role, 'invoice.create') && <Button variant="primary" onClick={() => { setUploadFile(null); setCreating(true); }} data-testid="new-invoice">+ {L.newInvoice}</Button>}
         </>} />
 
       {/* 篩選後的摘要 */}
@@ -173,7 +189,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
           emptyDescription={hasFilters ? 'Try clearing a filter.' : undefined} />
       </Card>
 
-      {creating && <InvoiceFormModal open type={type} onClose={() => setCreating(false)} onSaved={(id) => setOpenId(id)} />}
+      {creating && <InvoiceFormModal open type={type} initialFile={uploadFile} onClose={() => { setCreating(false); setUploadFile(null); }} onSaved={(id) => setOpenId(id)} />}
       <InvoiceDetailModal invoiceId={openId} onClose={() => setOpenId(null)} />
     </>
   );

@@ -9,6 +9,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { setFileSaver } from '@/lib/download';
+import { setAttachmentServices } from '@/lib/attachments';
 import { DemoRepository } from './demoRepository';
 import { HostedRepository, type HostedDb, type HostedUser } from './hostedRepository';
 import type { Repository } from './repository';
@@ -32,12 +33,16 @@ export async function initRepository(): Promise<void> {
   if (import.meta.env.VITE_HOST !== 'artifact') return;
   const claude = (window as unknown as { claude?: ClaudeRuntime }).claude;
   if (!claude?.use) throw new Error('This page must be opened from claude.ai to load your data.');
-  const [db, user, downloads] = await Promise.all([
+  const [db, user, downloads, assets, sample] = await Promise.all([
     claude.use('db') as Promise<HostedDb | null>,
     claude.use('user') as Promise<HostedUser | null>,
     claude.use('downloads') as Promise<DownloadsCap | null>,
+    // 附件：檔案儲存（只有擁有者／編輯者會取得）與自動擷取欄位
+    claude.use('assets') as Promise<Parameters<typeof setAttachmentServices>[0]>,
+    claude.use('sample') as Promise<Parameters<typeof setAttachmentServices>[1]>,
   ]);
   if (!db) throw new Error('Your data could not be reached. Make sure you are signed in to claude.ai, then reload the page.');
+  setAttachmentServices(assets, sample);
   if (downloads) setFileSaver(async (filename, data) => { await downloads.save({ filename, data }); });
   repository = await HostedRepository.create(db, user);
 }

@@ -9,7 +9,7 @@
  * 所有金額參數與回傳值皆為整數仙（Sen）。
  */
 import type { IsoDate } from '@/domain/dates';
-import type { ActivityEntry, ApprovalStatus, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
+import type { ActivityEntry, ApprovalStatus, Attachment, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 
 export type DataMode = 'supabase' | 'demo' | 'hosted';
@@ -44,6 +44,12 @@ export interface Repository {
   recordPayment(invoiceId: string, values: PaymentFormValues): Promise<void>;
   /** 沖銷付款（僅管理員）。 */
   reversePayment(paymentId: string): Promise<void>;
+
+  // ---------- 附件（僅雲端模式提供檔案儲存）----------
+  /** 將已上傳的附件記錄到發票上。 */
+  addAttachment?(invoiceId: string, attachment: Attachment): Promise<void>;
+  /** 從發票移除附件紀錄（檔案本身由呼叫端刪除）。 */
+  removeAttachment?(invoiceId: string, attachmentId: string): Promise<void>;
 
   // ---------- 僅本機模式（資料存在瀏覽器）----------
   /** 載入範例資料（會取代目前所有資料）。 */

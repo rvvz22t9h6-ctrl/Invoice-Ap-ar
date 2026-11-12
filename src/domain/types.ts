@@ -29,11 +29,54 @@ export interface Counterparty {
   id: string;
   kind: CounterpartyKind;
   name: string;
+  /** 以下為聯絡資料（皆為選填；舊資料可能沒有）。 */
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  /** 預設付款期限（天），新增發票時自動帶入到期日。 */
+  paymentTermsDays?: number | null;
+  notes?: string;
 }
+
+/**
+ * 沖帳類型：
+ *   payment     實際收／付款（計入現金）
+ *   credit_note 折讓單（減少應收／應付，但不是現金）
+ *   write_off   呆帳沖銷（僅 AR：確定收不到的款項）
+ */
+export type PaymentKind = 'payment' | 'credit_note' | 'write_off';
+
+export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
+  payment: 'Payment',
+  credit_note: 'Credit note',
+  write_off: 'Write-off (bad debt)',
+};
+
+/** 公司設定。 */
+export interface CompanySettings {
+  companyName: string;
+  /** 期初銀行餘額（仙），現金流預測的起點。 */
+  openingBalance: Sen;
+  /** 期初餘額的日期；之後的實際收付款會自動加減。 */
+  openingBalanceDate: IsoDate | null;
+  defaultTermsAR: number;
+  defaultTermsAP: number;
+}
+
+export const DEFAULT_SETTINGS: CompanySettings = {
+  companyName: '',
+  openingBalance: 0,
+  openingBalanceDate: null,
+  defaultTermsAR: 30,
+  defaultTermsAP: 30,
+};
 
 export interface Payment {
   id: string;
   invoiceId: string;
+  /** 沖帳類型；舊資料沒有此欄位，視為 payment。 */
+  kind?: PaymentKind;
   paymentDate: IsoDate;
   amount: Sen;
   method: string;

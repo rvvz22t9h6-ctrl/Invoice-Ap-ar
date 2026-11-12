@@ -9,8 +9,11 @@
  * 所有金額參數與回傳值皆為整數仙（Sen）。
  */
 import type { IsoDate } from '@/domain/dates';
-import type { ActivityEntry, ApprovalStatus, Attachment, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
+import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, UserProfile } from '@/domain/types';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
+
+/** 可修改的供應商／客戶欄位。 */
+export type CounterpartyPatch = Partial<Omit<Counterparty, 'id' | 'kind'>>;
 
 export type DataMode = 'supabase' | 'demo' | 'hosted';
 
@@ -44,6 +47,12 @@ export interface Repository {
   recordPayment(invoiceId: string, values: PaymentFormValues): Promise<void>;
   /** 沖銷付款（僅管理員）。 */
   reversePayment(paymentId: string): Promise<void>;
+
+  // ---------- 供應商／客戶與公司設定 ----------
+  updateCounterparty(id: string, patch: CounterpartyPatch): Promise<Counterparty>;
+  getSettings(): Promise<CompanySettings>;
+  /** 僅管理員。 */
+  updateSettings(patch: Partial<CompanySettings>): Promise<CompanySettings>;
 
   // ---------- 附件（僅雲端模式提供檔案儲存）----------
   /** 將已上傳的附件記錄到發票上。 */

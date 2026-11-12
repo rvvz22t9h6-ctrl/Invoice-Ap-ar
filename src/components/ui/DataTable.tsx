@@ -34,10 +34,12 @@ interface Props<T> {
   emptyDescription?: string;
   rowClassName?: (row: T) => string;
   testId?: string;
+  /** 多選（批次操作用）：已選取的列 ID 與可選條件。 */
+  selection?: { selected: Set<string>; onChange: (next: Set<string>) => void; isSelectable?: (row: T) => boolean };
 }
 
 export function DataTable<T>({
-  rows, columns, rowKey, onRowClick, initialSort, pageSize = 25, emptyTitle = 'No records found', emptyDescription, rowClassName, testId,
+  rows, columns, rowKey, onRowClick, initialSort, pageSize = 25, emptyTitle = 'No records found', emptyDescription, rowClassName, testId, selection,
 }: Props<T>) {
   const [sort, setSort] = useState(initialSort ?? null);
   const [page, setPage] = useState(0);
@@ -66,6 +68,20 @@ export function DataTable<T>({
 
   if (!rows.length) return <EmptyState title={emptyTitle} description={emptyDescription} />;
 
+  const selectableVisible = selection ? visible.filter((r) => selection.isSelectable?.(r) ?? true).map(rowKey) : [];
+  const allChecked = selectableVisible.length > 0 && selectableVisible.every((id) => selection!.selected.has(id));
+  const toggleAll = () => {
+    const next = new Set(selection!.selected);
+    selectableVisible.forEach((id) => (allChecked ? next.delete(id) : next.add(id)));
+    selection!.onChange(next);
+  };
+  const toggle = (id: string) => {
+    const next = new Set(selection!.selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selection!.onChange(next);
+  };
+  const checkbox = 'size-4 rounded border-slate-300 accent-navy-700';
+
   const cellCls = (c: Column<T>) => cx('px-4 py-3', c.align === 'right' && 'text-right tabular whitespace-nowrap', c.hideOnMobile && 'hidden md:table-cell', c.wideOnly && 'hidden 2xl:table-cell', c.className);
 
   return (
@@ -74,6 +90,11 @@ export function DataTable<T>({
         <table className="min-w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/80">
             <tr>
+              {selection && (
+                <th scope="col" className="w-10 px-4 py-2.5">
+                  <input type="checkbox" className={checkbox} checked={allChecked} disabled={!selectableVisible.length} onChange={toggleAll} aria-label="Select all on this page" data-testid="select-all" />
+                </th>
+              )}
               {columns.map((c) => (
                 <th key={c.key} scope="col" className={cx(cellCls(c), 'py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap')}
                   aria-sort={sort?.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
@@ -92,14 +113,21 @@ export function DataTable<T>({
           <tbody className="divide-y divide-slate-100">
             {visible.map((row) => (
               <tr key={rowKey(row)} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cx(onRowClick && 'cursor-pointer hover:bg-navy-50/50', rowClassName?.(row))}>
+                className={cx(onRowClick && 'cursor-pointer hover:bg-navy-50/50', selection?.selected.has(rowKey(row)) && 'bg-navy-50/70', rowClassName?.(row))}>
+                {selection && (
+                  <td className="w-10 px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                    {(selection.isSelectable?.(row) ?? true) && (
+                      <input type="checkbox" className={checkbox} checked={selection.selected.has(rowKey(row))} onChange={() => toggle(rowKey(row))} aria-label="Select row" data-testid="select-row" />
+                    )}
+                  </td>
+                )}
                 {columns.map((c) => <td key={c.key} className={cx(cellCls(c), 'align-top text-slate-700')}>{c.render(row)}</td>)}
               </tr>
             ))}
           </tbody>
           {hasFooter && (
             <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
-              <tr>{columns.map((c) => <td key={c.key} className={cellCls(c)}>{c.footer}</td>)}</tr>
+              <tr>{selection && <td />}{columns.map((c) => <td key={c.key} className={cellCls(c)}>{c.footer}</td>)}</tr>
             </tfoot>
           )}
         </table>

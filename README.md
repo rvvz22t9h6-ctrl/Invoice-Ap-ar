@@ -23,6 +23,12 @@ and overdue. Every figure is calculated live from invoice and payment records.
 | **Accounts Payable** | Add / edit supplier invoices, SST tax helper, **approval workflow**, record full or partial payments, search, filters (supplier, payment status, approval status, date range), sort, totals, CSV export |
 | **Accounts Receivable** | Create customer invoices, record full or partial collections, overdue tracking, search, filters, CSV export |
 | **Aging Report** | Current / 1–30 / 31–60 / 61–90 / 90+ days for AP and AR, by supplier/customer and by invoice, CSV export |
+| **Suppliers & Customers** | Directory with contact person, phone, email, address and default payment terms (fills in the due date on new invoices); Statement of Account with running balance and ageing, exported to Excel; ready-to-copy payment reminder for overdue customers |
+| **Cash Flow Forecast** | Bank balance today (opening balance + payments since), expected receipts and payments for 12 weeks by due date, projected balance, shortfall warning, chart, Excel export |
+| **Credit notes & write-offs** | Close an invoice with a credit note or bad-debt write-off (AR); they reduce balances but are not counted as cash collected/paid |
+| **AP payment run** | Select approved bills and pay them in one go; admins can approve several pending bills at once |
+| **Performance** | DSO, DPO, average days to collect, % collected on time, credit notes and write-offs on the dashboard |
+| **Company settings** | Company name (sidebar, Excel reports, statements), default payment terms, opening bank balance |
 | **Excel export** | Full report workbook (Summary + AR + AP + Payments + Aging) and per-list exports, print-ready |
 | **Controls** | Duplicate-number check, overpayment guard, cancel with reason, restore, admin-only delete and payment reversal, full per-invoice history (audit log) |
 
@@ -107,9 +113,9 @@ Password for all: `demo1234`. Use **Reset demo data** in the sidebar to start ov
 
 | Command | What it checks |
 |---|---|
-| `npm test` | 46 unit tests (including Excel export and backup/restore): money maths, every status rule, aging buckets, dashboard totals, trends, validation, CSV, demo-repository permissions and business rules |
-| `npm run test:db` | 13 integration tests on a real PostgreSQL: duplicates, overpayment, approval, cancellation, audit log, RLS for every role. Needs `DATABASE_URL` (default `postgres://postgres@localhost:55432/postgres`) |
-| `npm run test:e2e` | 21 Playwright browser tests that click through every flow, open the downloaded Excel files, and compare figures with the calculation engine (desktop, mobile, and the single HTML file opened from disk) |
+| `npm test` | 69 unit tests (including Excel export, backup/restore, cash flow, statements, metrics): money maths, every status rule, aging buckets, dashboard totals, trends, validation, CSV, demo-repository permissions and business rules |
+| `npm run test:db` | 16 integration tests on a real PostgreSQL: duplicates, overpayment, approval, cancellation, audit log, RLS for every role. Needs `DATABASE_URL` (default `postgres://postgres@localhost:55432/postgres`) |
+| `npm run test:e2e` | 30 Playwright browser tests that click through every flow, open the downloaded Excel files, and compare figures with the calculation engine (desktop, mobile, and the single HTML file opened from disk) |
 | `npm run typecheck` / `npm run build` | Strict TypeScript and production build |
 
 ## Project structure

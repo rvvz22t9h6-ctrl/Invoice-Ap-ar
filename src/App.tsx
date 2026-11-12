@@ -10,6 +10,9 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InvoicesPage } from '@/features/invoices/InvoicesPage';
 import { AgingPage } from '@/features/aging/AgingPage';
+import { ContactsPage } from '@/features/contacts/ContactsPage';
+import { CashFlowPage } from '@/features/cashflow/CashFlowPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -27,6 +30,9 @@ export default function App() {
         <Route path="ap" element={<InvoicesPage key="AP" type="AP" />} />
         <Route path="ar" element={<InvoicesPage key="AR" type="AR" />} />
         <Route path="aging" element={<AgingPage />} />
+        <Route path="contacts" element={<ContactsPage />} />
+        <Route path="cash-flow" element={<CashFlowPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -11,7 +11,7 @@
 import { z } from 'zod';
 import { isValidIsoDate, type IsoDate } from './dates';
 import { formatMYR, MAX_SEN, toSen, type Sen } from './money';
-import type { ComputedInvoice, Invoice, InvoiceType } from './types';
+import type { ComputedInvoice, Invoice, InvoiceType, PaymentKind } from './types';
 
 /** 業務規則錯誤：code 供程式判斷，message 直接顯示給使用者。 */
 export class DomainError extends Error {
@@ -97,6 +97,7 @@ export type InvoiceFormValues = z.output<typeof invoiceFormSchema>;
 // ---------------------------------------------------------------------------
 
 export const paymentFormSchema = (today: IsoDate) => z.object({
+  kind: z.enum(['payment', 'credit_note', 'write_off']).default('payment'),
   paymentDate: isoDate('Payment date').refine((d) => d <= today, 'Payment date cannot be in the future'),
   amount: moneyField('Payment amount', { allowZero: false }),
   method: z.string().trim().min(1, 'Payment method is required').max(50),
@@ -106,6 +107,9 @@ export const paymentFormSchema = (today: IsoDate) => z.object({
 
 export type PaymentFormInput = z.input<ReturnType<typeof paymentFormSchema>>;
 export type PaymentFormValues = z.output<ReturnType<typeof paymentFormSchema>>;
+
+/** 折讓單與沖銷不需要付款方式，使用固定值。 */
+export const KIND_METHOD: Record<Exclude<PaymentKind, 'payment'>, string> = { credit_note: 'Credit note', write_off: 'Write-off' };
 
 export const PAYMENT_METHODS = ['Bank Transfer (IBG/DuitNow)', 'FPX', 'Cheque', 'Cash', 'Credit Card', 'Contra / Offset', 'Other'];
 
@@ -156,10 +160,11 @@ export function assertNotDuplicate(...args: Parameters<typeof findDuplicateInvoi
   }
 }
 
-/** 記錄付款前的檢查：已取消、AP 未審批、超額付款皆不允許。 */
-export function assertCanRecordPayment(inv: ComputedInvoice, amount: Sen): void {
+/** 記錄付款前的檢查：已取消、AP 未審批（僅限實際付款）、超額付款、AP 不可沖銷呆帳。 */
+export function assertCanRecordPayment(inv: ComputedInvoice, amount: Sen, kind: PaymentKind = 'payment'): void {
   if (inv.isCancelled) throw new DomainError('CANCELLED', 'Cannot record a payment on a cancelled invoice');
-  if (inv.type === 'AP' && inv.approvalStatus !== 'approved') {
+  if (kind === 'write_off' && inv.type !== 'AR') throw new DomainError('VALIDATION', 'Only customer invoices can be written off');
+  if (kind === 'payment' && inv.type === 'AP' && inv.approvalStatus !== 'approved') {
     throw new DomainError('NOT_APPROVED', 'This supplier invoice must be approved before payment');
   }
   if (inv.outstandingBalance === 0) throw new DomainError('OVERPAYMENT', 'This invoice is already fully paid', 'amount');

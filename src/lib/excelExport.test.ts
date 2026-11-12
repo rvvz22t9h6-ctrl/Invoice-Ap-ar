@@ -36,7 +36,7 @@ const num = (v: ExcelJS.CellValue) => (typeof v === 'object' && v && 'result' in
 describe('Excel full report', () => {
   it('contains all six sheets', async () => {
     const wb = await roundTrip(await buildFullReport(invoices, TODAY, 'Sample Sdn Bhd'));
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'AR Invoices', 'AP Invoices', 'Payments', 'AR Aging', 'AP Aging']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'AR Invoices', 'AP Invoices', 'Payments', 'AR Aging', 'AP Aging', 'Cash Flow Forecast']);
   });
 
   it('summary figures equal the dashboard calculation', async () => {

@@ -9,11 +9,13 @@ import { Link } from 'react-router-dom';
 import { Card, EmptyState, PageHeader, Spinner, StatCard, TypeTag } from '@/components/ui';
 import { AGING_BUCKETS, buildAgingReport } from '@/domain/aging';
 import { buildDashboard } from '@/domain/dashboard';
-import { formatDate, formatDateTime } from '@/domain/dates';
+import { COMPANY_TIME_ZONE, formatDate, formatDateTime } from '@/domain/dates';
+import { buildMetrics } from '@/domain/metrics';
+import { buildCashFlowForecast } from '@/domain/cashflow';
 import { dueDescription } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import type { ComputedInvoice } from '@/domain/types';
-import { useActivity, useInvoices } from '@/hooks/useFinanceData';
+import { useActivity, useInvoices, useSettings } from '@/hooks/useFinanceData';
 import { can } from '@/domain/permissions';
 import { useAuth } from '@/features/auth/AuthContext';
 import { InvoiceDetailModal } from '@/features/invoices/InvoiceDetailModal';
@@ -28,6 +30,13 @@ export function DashboardPage() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const d = useMemo(() => buildDashboard(invoices, today), [invoices, today]);
+  const { settings } = useSettings();
+  const m = useMemo(() => buildMetrics(invoices, today), [invoices, today]);
+  const cf = useMemo(() => buildCashFlowForecast(invoices, today, settings, 4), [invoices, today, settings]);
+  // 未來 4 週（含逾期）預計收付
+  const next4 = cf.rows.reduce((t, r) => ({ in: t.in + r.inflow, out: t.out + r.outflow }), { in: 0, out: 0 });
+  const hour = Number(new Date().toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: COMPANY_TIME_ZONE }));
+  const greeting = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}${user?.fullName && !/^(Owner|Viewer)$/.test(user.fullName) ? `, ${user.fullName.split(' ')[0]}` : ''}`;
   const aging = useMemo(() => ({ AR: buildAgingReport(invoices, 'AR'), AP: buildAgingReport(invoices, 'AP') }), [invoices]);
 
   if (isLoading) return <div className="grid h-64 place-items-center text-slate-400"><Spinner /></div>;
@@ -37,9 +46,9 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Live position of payables and receivables, calculated from invoice and payment records."
+      <PageHeader eyebrow={`${greeting} · ${formatDate(today)}`} title="Dashboard" subtitle={`Live position of ${settings.companyName || 'your company'}'s payables and receivables, calculated from invoice and payment records.`}
         actions={<ExportExcelButton variant="primary" label="Export full report to Excel" testId="export-full-report"
-          fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today)} disabled={!invoices.length} />} />
+          fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today, settings.companyName, settings)} disabled={!invoices.length} />} />
 
       {invoices.length === 0 && (
         <section className="mb-6 rounded-xl border border-navy-100 bg-navy-50 p-6" data-testid="welcome">
@@ -59,18 +68,49 @@ export function DashboardPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard testId="kpi-ar-outstanding" accent="ar" label="Total AR Outstanding" value={formatMYR(d.AR.outstanding)} hint={`${plural(d.AR.outstandingCount, 'unpaid customer invoice')}`} />
-        <StatCard testId="kpi-ar-collected" accent="green" label="Total AR Collected" value={formatMYR(d.AR.settled)} hint={`${formatMYR(d.AR.settledThisMonth)} collected this month`} />
-        <StatCard testId="kpi-ar-overdue" accent="red" label="Overdue AR" value={formatMYR(d.AR.overdue)} hint={`${plural(d.AR.overdueCount, 'invoice')} past due date`} />
-        <StatCard testId="kpi-ap-outstanding" accent="ap" label="Total AP Outstanding" value={formatMYR(d.AP.outstanding)} hint={`${plural(d.AP.outstandingCount, 'unpaid supplier invoice')}`} />
-        <StatCard testId="kpi-ap-paid" accent="green" label="Total AP Paid" value={formatMYR(d.AP.settled)} hint={`${formatMYR(d.AP.settledThisMonth)} paid this month`} />
-        <StatCard testId="kpi-ap-overdue" accent="red" label="Overdue AP" value={formatMYR(d.AP.overdue)} hint={`${plural(d.AP.overdueCount, 'invoice')} past due date`} />
+        <StatCard testId="kpi-ar-outstanding" accent="ar" icon="in" label="Total AR Outstanding" value={formatMYR(d.AR.outstanding)} hint={`${plural(d.AR.outstandingCount, 'unpaid customer invoice')}`} />
+        <StatCard testId="kpi-ar-collected" accent="green" icon="check" label="Total AR Collected" value={formatMYR(d.AR.settled)} hint={`${formatMYR(d.AR.settledThisMonth)} collected this month`} />
+        <StatCard testId="kpi-ar-overdue" accent="red" icon="alert" label="Overdue AR" value={formatMYR(d.AR.overdue)} hint={`${plural(d.AR.overdueCount, 'invoice')} past due date`} />
+        <StatCard testId="kpi-ap-outstanding" accent="ap" icon="out" label="Total AP Outstanding" value={formatMYR(d.AP.outstanding)} hint={`${plural(d.AP.outstandingCount, 'unpaid supplier invoice')}`} />
+        <StatCard testId="kpi-ap-paid" accent="green" icon="check" label="Total AP Paid" value={formatMYR(d.AP.settled)} hint={`${formatMYR(d.AP.settledThisMonth)} paid this month`} />
+        <StatCard testId="kpi-ap-overdue" accent="red" icon="alert" label="Overdue AP" value={formatMYR(d.AP.overdue)} hint={`${plural(d.AP.overdueCount, 'invoice')} past due date`} />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl bg-navy-50 px-5 py-3 text-sm text-navy-900 ring-1 ring-navy-100">
-        <span>Net position (AR − AP outstanding): <strong className="tabular" data-testid="net-position">{formatMYR(d.netPosition)}</strong></span>
-        <span className="text-navy-700">Invoiced this month: AR {formatMYR(d.AR.invoicedThisMonth)} · AP {formatMYR(d.AP.invoicedThisMonth)}</span>
-      </div>
+      {/* 現金與淨部位 */}
+      <section className="mt-4 grid grid-cols-1 overflow-hidden rounded-xl bg-navy-900 text-white sm:grid-cols-2 xl:grid-cols-4" data-testid="cash-band">
+        {[
+          ['Net position (AR − AP)', <span data-testid="net-position">{formatMYR(d.netPosition)}</span>, 'Owed to us minus what we owe'],
+          ['Bank balance today (est.)', formatMYR(cf.currentBalance), settings.openingBalanceDate ? 'From your bank balance and payments since' : <Link to="/settings" className="underline">Set your bank balance</Link>],
+          ['Next 4 weeks: in', formatMYR(next4.in), `${formatMYR(cf.rows[0]!.inflow)} of it already overdue`],
+          ['Next 4 weeks: out', formatMYR(next4.out), <Link to="/cash-flow" className="underline">Open cash flow forecast →</Link>],
+        ].map(([label, value, hint], i) => (
+          <div key={i} className="border-white/10 px-5 py-4 sm:[&:nth-child(n+3)]:border-t xl:[&:nth-child(n+3)]:border-t-0 xl:[&:not(:first-child)]:border-l">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-navy-300">{label}</p>
+            <p className="font-display tabular mt-1 text-xl font-semibold">{value}</p>
+            <p className="mt-0.5 text-xs text-navy-300">{hint}</p>
+          </div>
+        ))}
+      </section>
+
+      {/* 績效指標 */}
+      <Card className="mt-6" title="Performance" action={<span className="text-xs text-slate-500">Last 90 days for DSO / DPO, last 12 months for the rest</span>} padded={false}>
+        <dl className="grid grid-cols-2 divide-slate-100 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x" data-testid="metrics">
+          {[
+            ['DSO', m.dso === null ? '—' : `${m.dso} days`, 'Days sales outstanding: how long customers take to pay on average'],
+            ['DPO', m.dpo === null ? '—' : `${m.dpo} days`, 'Days payables outstanding: how long you take to pay suppliers'],
+            ['Avg. days to collect', m.avgDaysToCollect === null ? '—' : `${m.avgDaysToCollect} days`, `From invoice date to full payment (${m.sampleSizes.collected} invoices)`],
+            ['Collected on time', m.onTimeCollectionRate === null ? '—' : `${Math.round(m.onTimeCollectionRate * 100)}%`, 'Customer invoices paid by their due date'],
+            ['Credit notes', formatMYR(d.AR.creditNotes + d.AP.creditNotes), `AR ${formatMYR(d.AR.creditNotes)} · AP ${formatMYR(d.AP.creditNotes)}`],
+            ['Written off', formatMYR(d.AR.writtenOff), m.badDebtRate === null ? 'Bad debt' : `${(m.badDebtRate * 100).toFixed(1)}% of 12-month sales`],
+          ].map(([label, value, hint]) => (
+            <div key={label} className="px-5 py-4" title={hint}>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</dt>
+              <dd className="font-display tabular mt-1 text-lg font-semibold text-slate-900">{value}</dd>
+              <dd className="mt-0.5 text-[11px] leading-snug text-slate-500">{hint}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2"><TrendChart data={d.trends} /></div>

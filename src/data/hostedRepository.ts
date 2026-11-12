@@ -10,12 +10,14 @@
  *   meta/counterparties     供應商與客戶清單
  *   meta/activity           最近 300 筆活動紀錄
  *   meta/info               是否為範例資料、最後修改時間
+ *   meta/settings           公司設定（名稱、期初銀行餘額、預設付款期限）
  *
  * 寫入策略：每次變更後比對各文件內容，只寫入有變動的文件；
  * 同一時間只進行一個寫入（依序排隊），並把狀態回報給畫面（儲存中／已儲存／失敗）。
  */
 import { todayIso } from '@/domain/dates';
-import type { ActivityEntry, Counterparty, Invoice, UserProfile } from '@/domain/types';
+import type { ActivityEntry, CompanySettings, Counterparty, Invoice, UserProfile } from '@/domain/types';
+import { DEFAULT_SETTINGS } from '@/domain/types';
 import { DemoRepository, memoryStore, STATE_VERSION, type DemoState } from './demoRepository';
 
 // ---------- 平台 db 介面（僅列出用到的部分）----------
@@ -100,12 +102,15 @@ export class HostedRepository extends DemoRepository {
   // ---------- 載入 ----------
 
   private async loadFromCloud() {
-    const [info, cps, act, shards] = await Promise.all([
+    const [info, cps, act, shards, settingsDoc] = await Promise.all([
       this.db.doc('meta/info').get(),
       this.db.doc('meta/counterparties').get(),
       this.db.doc('meta/activity').get(),
       this.db.collection('invoices').limit(1000).get(),
+      this.db.doc('meta/settings').get(),
     ]);
+    const settings = settingsDoc.data() as CompanySettings | undefined;
+    if (settingsDoc.exists) this.written.set('meta/settings', JSON.stringify(settings));
     const invoices: InvoiceRecord[] = [];
     this.written.clear();
     for (const d of shards.docs) {
@@ -121,7 +126,7 @@ export class HostedRepository extends DemoRepository {
     if (act.exists) this.written.set('meta/activity', JSON.stringify({ items: activity }));
     if (info.exists) this.written.set('meta/info', JSON.stringify({ isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null }));
     // 雲端是空的 → 從空白開始（不自動放入範例資料）
-    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null };
+    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined };
   }
 
   // ---------- 儲存 ----------
@@ -147,6 +152,7 @@ export class HostedRepository extends DemoRepository {
     for (const [key, items] of shardInvoices(this.state.invoices)) desired.set(`invoices/${key}`, JSON.stringify({ items }));
     desired.set('meta/counterparties', JSON.stringify({ items: this.state.counterparties }));
     desired.set('meta/activity', JSON.stringify({ items: this.state.activity.slice(0, ACTIVITY_KEEP) }));
+    if (this.state.settings) desired.set('meta/settings', JSON.stringify(this.state.settings));
     desired.set('meta/info', JSON.stringify({ isSample: this.state.isSample !== false, modifiedAt: this.state.modifiedAt ?? null }));
     try {
       for (const [path, json] of desired) {

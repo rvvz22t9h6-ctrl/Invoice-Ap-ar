@@ -19,7 +19,8 @@ import { formatMYR, sumSen } from '@/domain/money';
 import { can } from '@/domain/permissions';
 import { APPROVAL_LABEL, APPROVAL_STATUSES, PAYMENT_STATUSES, TYPE_LABELS, type ComputedInvoice, type InvoiceType } from '@/domain/types';
 import { useAuth } from '@/features/auth/AuthContext';
-import { useInvoices } from '@/hooks/useFinanceData';
+import { useInvoiceMutations, useInvoices } from '@/hooks/useFinanceData';
+import { PaymentRunModal } from './PaymentRunModal';
 import { downloadTextFile } from '@/lib/download';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
 import { InvoiceFormModal } from './InvoiceFormModal';
@@ -40,6 +41,11 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   const [creating, setCreating] = useState(() => params.get('new') === '1' && can(user?.role, 'invoice.create'));
   const [openId, setOpenId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  // AP 批次操作：可選取「待審批」（管理員審批）或「已審批且未付清」（批次付款）的帳單
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [payRun, setPayRun] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const mutations = useInvoiceMutations();
   const uploadRef = useRef<HTMLInputElement>(null);
 
   // 篩選條件以 React state 為準（同步更新，連續快速操作也不會遺失），
@@ -79,6 +85,24 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
     outstanding: sumSen(rows.map((r) => r.outstandingBalance)),
     overdue: sumSen(rows.filter((r) => r.isOverdue).map((r) => r.outstandingBalance)),
   }), [rows]);
+
+  const canPayBills = type === 'AP' && can(user?.role, 'payment.record');
+  const canApprove = type === 'AP' && can(user?.role, 'invoice.approve');
+  const isSelectable = (r: ComputedInvoice) => !r.isCancelled && r.outstandingBalance > 0
+    && ((canPayBills && r.approvalStatus === 'approved') || (canApprove && r.approvalStatus === 'pending'));
+  const chosen = rows.filter((r) => selected.has(r.id));
+  const toPay = chosen.filter((r) => r.approvalStatus === 'approved');
+  const toApprove = chosen.filter((r) => r.approvalStatus === 'pending');
+  const approveSelected = async () => {
+    setApproving(true);
+    let ok = 0;
+    for (const r of toApprove) {
+      try { await mutations.setApproval.mutateAsync([r.id, 'approved']); ok += 1; } catch { /* 個別失敗於下方提示 */ }
+    }
+    setApproving(false);
+    toast(ok === toApprove.length ? `${ok} bill${ok === 1 ? '' : 's'} approved` : `${ok} of ${toApprove.length} bills approved`, ok === toApprove.length ? 'success' : 'error');
+    setSelected(new Set());
+  };
 
   const exportCsv = async () => {
     try { await downloadTextFile(invoicesToCsv(rows, type), csvFileName(type, today)); } catch { return; }
@@ -121,7 +145,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
 
   return (
     <>
-      <PageHeader title={L.module}
+      <PageHeader eyebrow="Ledgers" title={L.module}
         subtitle={type === 'AP' ? 'Supplier invoices — money the company owes.' : 'Customer invoices — money owed to the company.'}
         actions={<>
           <ExportExcelButton testId="export-excel" fileName={`${type}-invoices-${today}.xlsx`} build={() => buildInvoiceListWorkbook(rows, type)} disabled={!rows.length} />
@@ -182,7 +206,17 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
           </div>
           {hasFilters && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>}
         </div>
-        <DataTable testId="invoice-table" rows={rows} columns={columns} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)}
+        {chosen.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-navy-100 bg-navy-50 px-4 py-2.5 text-sm" data-testid="bulk-bar">
+            <span className="font-medium text-navy-900">{chosen.length} selected · {formatMYR(chosen.reduce((t, r) => t + r.outstandingBalance, 0))}</span>
+            <span className="flex-1" />
+            {canApprove && toApprove.length > 0 && <Button size="sm" onClick={approveSelected} loading={approving} data-testid="bulk-approve">Approve {toApprove.length}</Button>}
+            {canPayBills && toPay.length > 0 && <Button size="sm" variant="success" onClick={() => setPayRun(true)} data-testid="bulk-pay">Pay {toPay.length} bill{toPay.length === 1 ? '' : 's'}</Button>}
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
+          </div>
+        )}
+        <DataTable testId="invoice-table"
+          selection={canPayBills || canApprove ? { selected, onChange: setSelected, isSelectable } : undefined} rows={rows} columns={columns} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)}
           initialSort={{ key: 'invoiceDate', dir: 'desc' }}
           rowClassName={(r) => (r.isCancelled ? 'opacity-60' : '')}
           emptyTitle={hasFilters ? 'No invoices match these filters' : `No ${L.module.toLowerCase()} invoices yet`}
@@ -191,6 +225,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
 
       {creating && <InvoiceFormModal open type={type} initialFile={uploadFile} onClose={() => { setCreating(false); setUploadFile(null); }} onSaved={(id) => setOpenId(id)} />}
       <InvoiceDetailModal invoiceId={openId} onClose={() => setOpenId(null)} />
+      {payRun && <PaymentRunModal bills={toPay} onClose={() => setPayRun(false)} onDone={() => { setPayRun(false); setSelected(new Set()); }} />}
     </>
   );
 }

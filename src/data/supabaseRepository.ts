@@ -9,15 +9,20 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import { todayIso } from '@/domain/dates';
 import { fromSen, toSen } from '@/domain/money';
-import type { ActivityEntry, ApprovalStatus, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
+import type { ActivityEntry, ApprovalStatus, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, PaymentKind, UserProfile } from '@/domain/types';
+import { DEFAULT_SETTINGS } from '@/domain/types';
 import { kindForType } from '@/domain/types';
-import { DomainError, normalizeName, type InvoiceFormValues, type PaymentFormValues } from '@/domain/validation';
-import type { Repository } from './repository';
+import { DomainError, KIND_METHOD, normalizeName, type InvoiceFormValues, type PaymentFormValues } from '@/domain/validation';
+import type { CounterpartyPatch, Repository } from './repository';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
   id: string; invoice_id: string; payment_date: string; amount: number | string; method: string;
-  reference: string; notes: string; created_at: string;
+  reference: string; notes: string; created_at: string; kind?: PaymentKind;
+}
+interface CounterpartyRow {
+  id: string; kind: CounterpartyKind; name: string; email: string | null; phone: string | null;
+  contact_person: string; address: string; payment_terms_days: number | null; notes: string;
 }
 interface InvoiceRow {
   id: string; invoice_type: InvoiceType; invoice_number: string; counterparty_id: string;
@@ -36,7 +41,14 @@ const sen = (v: number | string) => toSen(v) ?? 0;
 function mapPayment(p: PaymentRow): Payment {
   return {
     id: p.id, invoiceId: p.invoice_id, paymentDate: p.payment_date, amount: sen(p.amount), method: p.method,
-    reference: p.reference, notes: p.notes, createdAt: p.created_at, createdByName: null,
+    reference: p.reference, notes: p.notes, createdAt: p.created_at, createdByName: null, kind: p.kind ?? 'payment',
+  };
+}
+
+function mapCounterparty(r: CounterpartyRow): Counterparty {
+  return {
+    id: r.id, kind: r.kind, name: r.name, email: r.email ?? '', phone: r.phone ?? '', contactPerson: r.contact_person ?? '',
+    address: r.address ?? '', paymentTermsDays: r.payment_terms_days, notes: r.notes ?? '',
   };
 }
 
@@ -67,6 +79,7 @@ export function toDomainError(error: PostgrestError | Error): DomainError {
   if (/exceeds the outstanding/.test(msg)) return new DomainError('OVERPAYMENT', msg, 'amount');
   if (/must be approved/.test(msg)) return new DomainError('NOT_APPROVED', msg);
   if (/cancelled invoice/.test(msg)) return new DomainError('CANCELLED', msg);
+  if (/Only customer invoices can be written off/.test(msg)) return new DomainError('VALIDATION', msg);
   if (/cannot be less than/.test(msg)) return new DomainError('TOTAL_BELOW_PAID', msg, 'invoiceAmount');
   if (/has payments/.test(msg)) return new DomainError('HAS_PAYMENTS', msg);
   if (code === 'P0001') return new DomainError('VALIDATION', msg);
@@ -127,9 +140,42 @@ export class SupabaseRepository implements Repository {
   }
 
   async listCounterparties(kind?: CounterpartyKind) {
-    let q = this.db.from('counterparties').select('id, kind, name').order('name');
+    let q = this.db.from('counterparties').select('id, kind, name, email, phone, contact_person, address, payment_terms_days, notes').order('name');
     if (kind) q = q.eq('kind', kind);
-    return check(await q) as Counterparty[];
+    return (check(await q) as CounterpartyRow[]).map(mapCounterparty);
+  }
+
+  async updateCounterparty(id: string, patch: CounterpartyPatch) {
+    const row: Record<string, unknown> = {};
+    if (patch.name !== undefined) row.name = patch.name.trim().replace(/\s+/g, ' ');
+    if (patch.email !== undefined) row.email = patch.email;
+    if (patch.phone !== undefined) row.phone = patch.phone;
+    if (patch.contactPerson !== undefined) row.contact_person = patch.contactPerson;
+    if (patch.address !== undefined) row.address = patch.address;
+    if (patch.paymentTermsDays !== undefined) row.payment_terms_days = patch.paymentTermsDays;
+    if (patch.notes !== undefined) row.notes = patch.notes;
+    const data = check(await this.db.from('counterparties').update(row).eq('id', id)
+      .select('id, kind, name, email, phone, contact_person, address, payment_terms_days, notes').single()) as CounterpartyRow;
+    return mapCounterparty(data);
+  }
+
+  async getSettings(): Promise<CompanySettings> {
+    const r = check(await this.db.from('app_settings').select('*').eq('id', 1).maybeSingle()) as {
+      company_name: string; opening_balance: number | string; opening_balance_date: string | null; default_terms_ar: number; default_terms_ap: number;
+    } | null;
+    if (!r) return { ...DEFAULT_SETTINGS };
+    return { companyName: r.company_name, openingBalance: sen(r.opening_balance), openingBalanceDate: r.opening_balance_date, defaultTermsAR: r.default_terms_ar, defaultTermsAP: r.default_terms_ap };
+  }
+
+  async updateSettings(patch: Partial<CompanySettings>) {
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.companyName !== undefined) row.company_name = patch.companyName;
+    if (patch.openingBalance !== undefined) row.opening_balance = fromSen(patch.openingBalance);
+    if (patch.openingBalanceDate !== undefined) row.opening_balance_date = patch.openingBalanceDate;
+    if (patch.defaultTermsAR !== undefined) row.default_terms_ar = patch.defaultTermsAR;
+    if (patch.defaultTermsAP !== undefined) row.default_terms_ap = patch.defaultTermsAP;
+    check(await this.db.from('app_settings').update(row).eq('id', 1).select('id').single());
+    return this.getSettings();
   }
 
   async listActivity({ limit = 10, invoiceId }: { limit?: number; invoiceId?: string } = {}) {
@@ -208,7 +254,8 @@ export class SupabaseRepository implements Repository {
 
   async recordPayment(invoiceId: string, v: PaymentFormValues) {
     check(await this.db.from('payments').insert({
-      invoice_id: invoiceId, payment_date: v.paymentDate, amount: fromSen(v.amount), method: v.method, reference: v.reference, notes: v.notes,
+      invoice_id: invoiceId, kind: v.kind ?? 'payment', payment_date: v.paymentDate, amount: fromSen(v.amount),
+      method: (v.kind ?? 'payment') === 'payment' ? v.method : KIND_METHOD[v.kind as 'credit_note' | 'write_off'], reference: v.reference, notes: v.notes,
     }).select('id').single());
   }
 

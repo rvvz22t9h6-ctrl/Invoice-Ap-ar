@@ -73,30 +73,53 @@ export function Card({ children, className, title, action, padded = true }: {
   );
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions, eyebrow }: { title: string; subtitle?: ReactNode; actions?: ReactNode; eyebrow?: string }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+      <div className="min-w-0">
+        {eyebrow && <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-navy-500">{eyebrow}</p>}
+        <h1 className="font-display text-[1.65rem] leading-tight font-semibold tracking-tight text-balance text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 max-w-2xl text-sm text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
   );
 }
 
-/** KPI 卡片：顯示單一指標與補充說明。accent 為左側色條。 */
-export function StatCard({ label, value, hint, accent = 'slate', testId }: {
-  label: string; value: ReactNode; hint?: ReactNode; accent?: 'ar' | 'ap' | 'red' | 'navy' | 'slate' | 'green'; testId?: string;
+export type StatAccent = 'ar' | 'ap' | 'red' | 'navy' | 'slate' | 'green' | 'amber';
+export type StatIcon = 'in' | 'out' | 'alert' | 'check' | 'bank' | 'trend' | 'clock' | 'doc';
+
+const ICON_PATH: Record<StatIcon, string> = {
+  in: 'M12 5v14m0 0-5-5m5 5 5-5',
+  out: 'M12 19V5m0 0-5 5m5-5 5 5',
+  alert: 'M12 8v5m0 3h.01M10.3 3.9 2.5 17.5A2 2 0 0 0 4.2 20.5h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  check: 'm5 12.5 4.5 4.5L19 7.5',
+  bank: 'M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M3 21h18M12 3l9 5H3l9-5z',
+  trend: 'M3 17l6-6 4 4 8-8m0 0h-5m5 0v5',
+  clock: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  doc: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6m-6 4h6',
+};
+
+const ACCENT_CHIP: Record<StatAccent, string> = {
+  ar: 'bg-[#e8f1fb] text-series-ar', ap: 'bg-[#fdeee7] text-series-ap', red: 'bg-red-50 text-red-600', navy: 'bg-navy-50 text-navy-700',
+  slate: 'bg-slate-100 text-slate-600', green: 'bg-emerald-50 text-emerald-700', amber: 'bg-amber-50 text-amber-700',
+};
+
+/** KPI 卡片：顯示單一指標與補充說明，右上角以色塊圖示標示類別。 */
+export function StatCard({ label, value, hint, accent = 'slate', icon, testId }: {
+  label: string; value: ReactNode; hint?: ReactNode; accent?: StatAccent; icon?: StatIcon; testId?: string;
 }) {
-  const bar: Record<string, string> = {
-    ar: 'bg-series-ar', ap: 'bg-series-ap', red: 'bg-red-600', navy: 'bg-navy-800', slate: 'bg-slate-300', green: 'bg-emerald-600',
-  };
   return (
-    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,31,61,0.04)]" data-testid={testId}>
-      <span className={cx('absolute inset-y-0 left-0 w-1', bar[accent])} aria-hidden />
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="tabular mt-1.5 text-[1.6rem] leading-tight font-semibold text-slate-900" data-testid={testId ? `${testId}-value` : undefined}>{value}</p>
+    <div className="group rounded-xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,31,61,0.04)] transition-shadow hover:shadow-[0_4px_16px_rgba(15,31,61,0.06)]" data-testid={testId}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</p>
+        {icon && (
+          <span className={cx('grid size-8 shrink-0 place-items-center rounded-lg', ACCENT_CHIP[accent])} aria-hidden>
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICON_PATH[icon]} /></svg>
+          </span>
+        )}
+      </div>
+      <p className="tabular font-display mt-1 text-[1.6rem] leading-tight font-semibold tracking-tight text-slate-900" data-testid={testId ? `${testId}-value` : undefined}>{value}</p>
       {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
     </div>
   );

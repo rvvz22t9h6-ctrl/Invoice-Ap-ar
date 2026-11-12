@@ -10,11 +10,13 @@
 import { addDays, todayIso, type IsoDate } from '@/domain/dates';
 import { computeInvoice } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
-import type { ActivityEntry, ApprovalStatus, Attachment, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
+import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
+import { DEFAULT_SETTINGS } from '@/domain/types';
+import type { CounterpartyPatch } from './repository';
 import { kindForType } from '@/domain/types';
 import {
   assertCanCancel, assertCanRecordPayment, assertNotDuplicate, assertTotalCoversPaid, DomainError,
-  normalizeName, type InvoiceFormValues, type PaymentFormValues,
+  KIND_METHOD, normalizeName, type InvoiceFormValues, type PaymentFormValues,
 } from '@/domain/validation';
 import type { Repository } from './repository';
 import { buildSampleActivity, buildSampleInvoices, SAMPLE_COUNTERPARTIES } from './sampleData';
@@ -35,6 +37,8 @@ export interface DemoState {
   isSample?: boolean;
   /** 最後一次修改時間（ISO），用於備份提醒。 */
   modifiedAt?: string | null;
+  /** 公司設定（舊資料沒有，使用預設值）。 */
+  settings?: CompanySettings;
 }
 
 /** 備份檔格式。 */
@@ -91,7 +95,9 @@ export function buildInitialDemoState(today: IsoDate): DemoState {
   const activity: ActivityEntry[] = buildSampleActivity(sample, formatMYR).map((a, i) => ({
     id: `seed-${i}`, invoiceId: a.invoiceId, action: a.action, summary: a.summary, actorName: a.actorName, createdAt: at(a.dayOffset, a.minuteOfDay),
   }));
-  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null };
+  // 範例公司設定：期初餘額設在 30 天前，讓現金流預測有合理起點
+  const settings: CompanySettings = { ...DEFAULT_SETTINGS, companyName: 'Sample Trading Sdn Bhd', openingBalance: 18_500_000, openingBalanceDate: addDays(today, -30) };
+  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null, settings };
 }
 
 export class DemoRepository implements Repository {
@@ -223,6 +229,37 @@ export class DemoRepository implements Repository {
     return this.delay(this.state.counterparties.filter((c) => !kind || c.kind === kind).sort((a, b) => a.name.localeCompare(b.name)));
   }
 
+  /** 更新供應商／客戶資料；改名時檢查同類別不可重名。 */
+  async updateCounterparty(id: string, patch: CounterpartyPatch) {
+    this.require('admin', 'finance');
+    const cp = this.state.counterparties.find((c) => c.id === id);
+    if (!cp) throw new DomainError('NOT_FOUND', 'Contact not found');
+    if (patch.name !== undefined) {
+      const name = patch.name.trim().replace(/\s+/g, ' ');
+      if (name.length < 2) throw new DomainError('VALIDATION', 'Name is required', 'name');
+      if (this.state.counterparties.some((c) => c.id !== id && c.kind === cp.kind && normalizeName(c.name) === normalizeName(name))) {
+        throw new DomainError('DUPLICATE_INVOICE', `Another ${cp.kind} is already called ${name}`, 'name');
+      }
+      patch = { ...patch, name };
+    }
+    Object.assign(cp, patch);
+    this.log(null, 'contact.updated', `Updated ${cp.kind} details for ${cp.name}`);
+    this.commit();
+    return this.delay(cp);
+  }
+
+  async getSettings() {
+    this.require();
+    return this.delay({ ...DEFAULT_SETTINGS, ...(this.state.settings ?? {}) });
+  }
+
+  async updateSettings(patch: Partial<CompanySettings>) {
+    this.require('admin');
+    this.state.settings = { ...DEFAULT_SETTINGS, ...(this.state.settings ?? {}), ...patch };
+    this.commit();
+    return this.delay(this.state.settings);
+  }
+
   async listActivity({ limit = 10, invoiceId }: { limit?: number; invoiceId?: string } = {}) {
     this.require();
 
@@ -318,13 +355,16 @@ export class DemoRepository implements Repository {
   async recordPayment(invoiceId: string, v: PaymentFormValues) {
     const user = this.require('admin', 'finance');
     const inv = this.find(invoiceId);
-    assertCanRecordPayment(computeInvoice(this.withName(inv), this.today()), v.amount);
+    const kind = v.kind ?? 'payment';
+    assertCanRecordPayment(computeInvoice(this.withName(inv), this.today()), v.amount, kind);
     inv.payments.push({
-      id: newId(), invoiceId, paymentDate: v.paymentDate, amount: v.amount, method: v.method, reference: v.reference,
+      id: newId(), invoiceId, kind, paymentDate: v.paymentDate, amount: v.amount,
+      method: kind === 'payment' ? v.method : KIND_METHOD[kind], reference: v.reference,
       notes: v.notes, createdAt: new Date().toISOString(), createdByName: user.fullName,
     });
     inv.payments.sort((a, b) => a.paymentDate.localeCompare(b.paymentDate));
-    this.log(inv.id, 'payment.recorded', `${inv.type === 'AR' ? 'Collected' : 'Paid'} ${formatMYR(v.amount)} on ${this.label(inv)}`);
+    const verb = kind === 'credit_note' ? 'Credit note' : kind === 'write_off' ? 'Wrote off' : inv.type === 'AR' ? 'Collected' : 'Paid';
+    this.log(inv.id, `${kind === 'payment' ? 'payment' : kind}.recorded`, `${verb} ${formatMYR(v.amount)} on ${this.label(inv)}`);
     this.commit();
   }
 

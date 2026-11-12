@@ -14,7 +14,7 @@ import { formatDate, formatDateTime } from '@/domain/dates';
 import { dueDescription } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import { can } from '@/domain/permissions';
-import { TYPE_LABELS, type ApprovalStatus, type Attachment } from '@/domain/types';
+import { PAYMENT_KIND_LABEL, TYPE_LABELS, type ApprovalStatus, type Attachment } from '@/domain/types';
 import { attachmentsEnabled, autoFillEnabled, deleteAttachmentFile } from '@/lib/attachments';
 import { AttachmentDrop, AttachmentList } from './AttachmentDrop';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -203,7 +203,7 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
               {invoice.payments.map((p) => (
                 <tr key={p.id}>
                   <td className="px-3 py-2 whitespace-nowrap">{formatDate(p.paymentDate)}</td>
-                  <td className="px-3 py-2">{p.method}{p.notes && <p className="text-xs text-slate-500">{p.notes}</p>}</td>
+                  <td className="px-3 py-2">{(p.kind ?? 'payment') === 'payment' ? p.method : <span className={p.kind === 'write_off' ? 'font-medium text-amber-800' : 'font-medium text-navy-700'}>{PAYMENT_KIND_LABEL[p.kind!]}</span>}{p.notes && <p className="text-xs text-slate-500">{p.notes}</p>}</td>
                   <td className="hidden px-3 py-2 text-slate-600 sm:table-cell">{p.reference || '—'}</td>
                   <td className="tabular px-3 py-2 text-right font-medium">{formatMYR(p.amount)}</td>
                   {can(role, 'payment.reverse') && <td className="px-3 py-2 text-right"><Button size="sm" variant="ghost" onClick={() => setView({ kind: 'reverse', paymentId: p.id, amount: p.amount })}>Reverse</Button></td>}

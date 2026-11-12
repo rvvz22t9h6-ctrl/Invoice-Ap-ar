@@ -5,7 +5,7 @@
  * 已取消的發票一律排除在外。
  *
  *   應付／應收未付總額  = Σ 未付餘額
- *   應付已付／應收已收  = Σ 付款金額（全部期間，另提供「本月」）
+ *   應付已付／應收已收  = Σ 實際付款金額（全部期間，另提供「本月」；不含折讓單與呆帳沖銷）
  *   逾期應付／逾期應收  = Σ 逾期發票的未付餘額
  *   每月趨勢（近 12 個月）：
  *     - 開立金額：依「發票日期」所在月份加總總金額
@@ -18,9 +18,13 @@ import type { ComputedInvoice, InvoiceType } from './types';
 export interface TypeTotals {
   outstanding: Sen;
   outstandingCount: number;
-  /** 全部期間已付（AP）／已收（AR）。 */
+  /** 全部期間實際已付（AP）／已收（AR）的現金（不含折讓與沖銷）。 */
   settled: Sen;
   settledThisMonth: Sen;
+  /** 折讓單總額（減少帳款，但不是現金）。 */
+  creditNotes: Sen;
+  /** 呆帳沖銷總額（僅 AR）。 */
+  writtenOff: Sen;
   overdue: Sen;
   overdueCount: number;
   invoicedThisMonth: Sen;
@@ -48,7 +52,7 @@ export interface DashboardData {
 }
 
 function emptyTotals(): TypeTotals {
-  return { outstanding: 0, outstandingCount: 0, settled: 0, settledThisMonth: 0, overdue: 0, overdueCount: 0, invoicedThisMonth: 0 };
+  return { outstanding: 0, outstandingCount: 0, settled: 0, settledThisMonth: 0, creditNotes: 0, writtenOff: 0, overdue: 0, overdueCount: 0, invoicedThisMonth: 0 };
 }
 
 export function buildDashboard(invoices: ComputedInvoice[], today: IsoDate, months = 12): DashboardData {
@@ -88,8 +92,11 @@ export function buildDashboard(invoices: ComputedInvoice[], today: IsoDate, mont
       else invPoint.arInvoiced += inv.totalAmount;
     }
 
-    // 已付／已收與趨勢（依付款日期）
+    // 已付／已收與趨勢（依付款日期）；折讓與沖銷另計，不算現金
     for (const p of inv.payments) {
+      const kind = p.kind ?? 'payment';
+      if (kind === 'credit_note') { t.creditNotes += p.amount; continue; }
+      if (kind === 'write_off') { t.writtenOff += p.amount; continue; }
       t.settled += p.amount;
       const payMonth = monthKey(p.paymentDate);
       if (payMonth === thisMonth) t.settledThisMonth += p.amount;

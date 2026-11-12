@@ -186,6 +186,36 @@ describe('Attachments', () => {
   });
 });
 
+describe('Contacts, settings and settlement types', () => {
+  it('updates contact details and blocks duplicate names', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const [a, b] = await repo.listCounterparties('customer');
+    const updated = await repo.updateCounterparty(a!.id, { contactPerson: 'Ms Tan', email: 'ap@example.com', paymentTermsDays: 45 });
+    expect(updated).toMatchObject({ contactPerson: 'Ms Tan', paymentTermsDays: 45 });
+    await expect(repo.updateCounterparty(a!.id, { name: b!.name.toUpperCase() })).rejects.toThrow(/already called/);
+  });
+
+  it('settings: sample has a company name; only admin can change', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    expect((await repo.getSettings()).companyName).toBe('Sample Trading Sdn Bhd');
+    await expect(repo.updateSettings({ companyName: 'X' })).rejects.toThrow(/admin/);
+    await repo.signIn('admin@demo.my', 'demo1234');
+    expect((await repo.updateSettings({ companyName: 'My Co Sdn Bhd', defaultTermsAR: 14 })).defaultTermsAR).toBe(14);
+    expect((await repo.getSettings()).companyName).toBe('My Co Sdn Bhd');
+  });
+
+  it('records credit notes and write-offs with their own labels', async () => {
+    await repo.signIn('admin@demo.my', 'demo1234');
+    const inv = await repo.createInvoice('AR', form({ invoiceNumber: 'K-1' }));
+    await repo.recordPayment(inv.id, paymentFormSchema(TODAY).parse({ kind: 'credit_note', paymentDate: TODAY, amount: '80', method: 'x' }));
+    await repo.recordPayment(inv.id, paymentFormSchema(TODAY).parse({ kind: 'write_off', paymentDate: TODAY, amount: '1000', method: 'x' }));
+    const [c] = computeInvoices((await repo.listInvoices()).filter((i) => i.id === inv.id), TODAY);
+    expect(c!.status).toBe('Paid');
+    expect(c!.payments.map((p) => [p.kind, p.method])).toEqual([['credit_note', 'Credit note'], ['write_off', 'Write-off']]);
+    expect((await repo.listActivity({ invoiceId: inv.id })).map((a) => a.summary.split(' on ')[0])).toEqual(['Wrote off RM 1,000.00', 'Credit note RM 80.00', 'Created AR invoice K-1 · New Supplier Sdn Bhd · RM 1,080.00']);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

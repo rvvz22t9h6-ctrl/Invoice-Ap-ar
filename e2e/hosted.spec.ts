@@ -63,7 +63,8 @@ test('owner: empty start, add invoice, saved to cloud, reload keeps it, Excel vi
   page.on('pageerror', (e) => errors.push(e.message));
   await open(page);
   await expect(page.getByTestId('welcome')).toBeVisible();
-  await expect(page.getByText('Carrie')).toBeVisible();
+  await expect(page.getByText('Carrie', { exact: true })).toBeVisible(); // 側邊欄的使用者名稱
+  await expect(page.getByText(/Good (morning|afternoon|evening), Carrie/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
 
   await page.getByRole('link', { name: '+ New customer invoice (AR)' }).click();

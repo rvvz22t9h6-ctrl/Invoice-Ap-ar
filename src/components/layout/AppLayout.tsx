@@ -4,24 +4,36 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { repository } from '@/data';
 import { DataBanners, DataManagerModal, downloadBackup, isHosted, isLocalMode, useSaveStatus } from '@/features/data/DataManager';
 import { ROLE_LABEL } from '@/domain/types';
-import { formatDate } from '@/domain/dates';
 import logoUrl from '@/assets/logo.svg';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { cx } from '@/components/ui';
+import { useSettings } from '@/hooks/useFinanceData';
 
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>
 );
 
-const NAV: { to: string; label: string; icon: ReactNode; end?: boolean }[] = [
-  { to: '/', label: 'Dashboard', end: true, icon: <Icon d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z" /> },
-  { to: '/ap', label: 'Accounts Payable', icon: <Icon d="M12 19V5m0 14-6-6m6 6 6-6" /> },
-  { to: '/ar', label: 'Accounts Receivable', icon: <Icon d="M12 5v14m0-14 6 6m-6-6-6 6" /> },
-  { to: '/aging', label: 'Aging Report', icon: <Icon d="M12 7v5l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean };
+/** 導覽分組：總覽、帳冊、報表、設定。 */
+const NAV: { group: string; items: NavItem[] }[] = [
+  { group: 'Overview', items: [
+    { to: '/', label: 'Dashboard', end: true, icon: <Icon d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z" /> },
+    { to: '/cash-flow', label: 'Cash Flow', icon: <Icon d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5" /> },
+  ] },
+  { group: 'Ledgers', items: [
+    { to: '/ap', label: 'Accounts Payable', icon: <Icon d="M12 19V5m0 14-6-6m6 6 6-6" /> },
+    { to: '/ar', label: 'Accounts Receivable', icon: <Icon d="M12 5v14m0-14 6 6m-6-6-6 6" /> },
+    { to: '/contacts', label: 'Suppliers & Customers', icon: <Icon d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm13 9v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.74" /> },
+  ] },
+  { group: 'Reports', items: [
+    { to: '/aging', label: 'Aging Report', icon: <Icon d="M12 7v5l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /> },
+  ] },
+  { group: 'Settings', items: [
+    { to: '/settings', label: 'Company Settings', icon: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /> },
+  ] },
 ];
 
 export function AppLayout() {
@@ -32,6 +44,8 @@ export function AppLayout() {
   const save = useSaveStatus();
   const location = useLocation();
   const toast = useToast();
+  const { settings } = useSettings();
+  const company = settings.companyName || 'Finance Portal';
 
   // 切換頁面時自動關閉手機選單
   useEffect(() => setOpen(false), [location.pathname]);
@@ -39,20 +53,27 @@ export function AppLayout() {
 
   const sidebar = (
     <div className="flex h-full flex-col bg-navy-900 text-navy-100">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <img src={logoUrl} alt="" className="size-9 rounded-lg ring-1 ring-white/10" />
-        <div className="leading-tight">
-          <p className="text-sm font-semibold text-white">Finance Portal</p>
-          <p className="text-xs text-navy-300">AP &amp; AR Management</p>
+      <div className="flex items-center gap-3 px-5 pt-6 pb-5">
+        <img src={logoUrl} alt="" className="size-10 rounded-xl ring-1 ring-white/10" />
+        <div className="min-w-0 leading-tight">
+          <p className="font-display truncate text-[15px] font-semibold text-white" title={company} data-testid="company-name">{company}</p>
+          <p className="text-xs text-navy-300">{settings.companyName ? 'Finance Portal · AP & AR' : 'AP & AR Management'}</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-2" aria-label="Main">
-        {NAV.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end}
-            className={({ isActive }) => cx('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              isActive ? 'bg-white/10 text-white shadow-inner' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
-            {n.icon}{n.label}
-          </NavLink>
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2" aria-label="Main">
+        {NAV.map((g) => (
+          <div key={g.group}>
+            <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-400">{g.group}</p>
+            <div className="space-y-0.5">
+              {g.items.map((n) => (
+                <NavLink key={n.to} to={n.to} end={n.end}
+                  className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive ? 'bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#5b9be6]' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
+                  {n.icon}{n.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       <div className="space-y-3 border-t border-white/10 px-5 py-4">
@@ -95,7 +116,7 @@ export function AppLayout() {
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>
-        <p className="text-sm font-semibold">Finance Portal</p>
+        <p className="font-display truncate text-sm font-semibold">{company}</p>
       </header>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -106,7 +127,6 @@ export function AppLayout() {
 
       <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <DataBanners onManage={() => setDataOpen(true)} />
-        <p className="mb-1 text-xs font-medium text-slate-400">Today · {formatDate(repository.today())} (MYT)</p>
         <Outlet />
         <DataManagerModal open={dataOpen} onClose={() => setDataOpen(false)} />
       </main>

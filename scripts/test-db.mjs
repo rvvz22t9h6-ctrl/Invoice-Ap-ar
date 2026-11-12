@@ -206,3 +206,34 @@ test('RLS: anonymous users get nothing; viewers cannot promote themselves', asyn
 test('activity_log cannot be written directly', async () => {
   await assert.rejects(as('admin', `insert into activity_log (action, summary) values ('x', 'fake')`), /permission denied|row-level security/);
 });
+
+test('credit notes and write-offs: rules and audit log', async () => {
+  const { rows: [bill] } = await asCommit('finance', `insert into invoices (invoice_type, invoice_number, counterparty_id, invoice_date, due_date, invoice_amount)
+    values ('AP', 'CN-1', '${SUPPLIER}', current_date, current_date + 30, 1000) returning *`);
+  // 折讓單不需要審批；呆帳沖銷只限 AR
+  await asCommit('finance', `insert into payments (invoice_id, kind, payment_date, amount, method) values ($1, 'credit_note', current_date, 100, 'Credit note')`, [bill.id]);
+  await assert.rejects(as('finance', `insert into payments (invoice_id, kind, payment_date, amount, method) values ($1, 'write_off', current_date, 10, 'Write-off')`, [bill.id]), /Only customer invoices/);
+  await assert.rejects(as('finance', `insert into payments (invoice_id, kind, payment_date, amount, method) values ($1, 'payment', current_date, 10, 'FPX')`, [bill.id]), /must be approved/);
+  await assert.rejects(as('finance', `insert into payments (invoice_id, kind, payment_date, amount, method) values ($1, 'bogus', current_date, 10, 'FPX')`, [bill.id]), /payments_kind_check/);
+  const { rows: [ar] } = await asCommit('finance', insertAR('WO-1'));
+  await asCommit('finance', `insert into payments (invoice_id, kind, payment_date, amount, method) values ($1, 'write_off', current_date, 1080, 'Write-off')`, [ar.id]);
+  const { rows: [b] } = await client.query(`select outstanding_balance from invoice_balances where id = $1`, [ar.id]);
+  assert.equal(b.outstanding_balance, '0.00');
+  const { rows: log } = await client.query(`select summary from activity_log where invoice_id = $1 order by id desc limit 1`, [ar.id]);
+  assert.match(log[0].summary, /^Wrote off RM 1,080.00 on AR invoice WO-1/);
+});
+
+test('company settings: everyone reads, only admin updates', async () => {
+  const { rows: [s0] } = await as('viewer', `select company_name, default_terms_ar from app_settings`);
+  assert.equal(s0.default_terms_ar, 30);
+  assert.equal((await as('finance', `update app_settings set company_name = 'X' returning id`)).rowCount, 0);
+  const { rows: [s1] } = await as('admin', `update app_settings set company_name = 'Sample Trading', opening_balance = 50000 returning company_name`);
+  assert.equal(s1.company_name, 'Sample Trading');
+  await assert.rejects(as('admin', `insert into app_settings (id) values (2)`), /app_settings_id_check|permission denied|row-level/);
+});
+
+test('contact details can be updated by finance', async () => {
+  const { rows: [c] } = await as('finance', `update counterparties set contact_person = 'Ms Tan', payment_terms_days = 45 where id = '${CUSTOMER}' returning contact_person, payment_terms_days`);
+  assert.deepEqual(c, { contact_person: 'Ms Tan', payment_terms_days: 45 });
+  await assert.rejects(as('finance', `update counterparties set payment_terms_days = 999 where id = '${CUSTOMER}'`), /payment_terms_days_check/);
+});

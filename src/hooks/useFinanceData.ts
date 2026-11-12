@@ -9,11 +9,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { repository } from '@/data';
 import { computeInvoices } from '@/domain/invoice';
-import type { ApprovalStatus, Attachment, CounterpartyKind, InvoiceType } from '@/domain/types';
+import type { ApprovalStatus, Attachment, CompanySettings, CounterpartyKind, InvoiceType } from '@/domain/types';
+import { DEFAULT_SETTINGS } from '@/domain/types';
+import type { CounterpartyPatch } from '@/data/repository';
 import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 
 export const queryKeys = {
   invoices: ['invoices'] as const,
+  settings: ['settings'] as const,
   activity: (invoiceId?: string, limit?: number) => ['activity', invoiceId ?? 'all', limit ?? 10] as const,
   counterparties: (kind?: CounterpartyKind) => ['counterparties', kind ?? 'all'] as const,
 };
@@ -36,6 +39,33 @@ export function useActivity({ enabled = true, ...options }: { invoiceId?: string
 
 export function useCounterparties(kind?: CounterpartyKind) {
   return useQuery({ queryKey: queryKeys.counterparties(kind), queryFn: () => repository.listCounterparties(kind) });
+}
+
+/** 公司設定（名稱、期初餘額、預設付款期限）。 */
+export function useSettings() {
+  const q = useQuery({ queryKey: queryKeys.settings, queryFn: () => repository.getSettings() });
+  return { ...q, settings: q.data ?? DEFAULT_SETTINGS };
+}
+
+export function useSettingsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<CompanySettings>) => repository.updateSettings(patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.settings }),
+  });
+}
+
+/** 更新供應商／客戶資料；名稱會影響發票顯示，因此一併刷新發票。 */
+export function useCounterpartyMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ([id, patch]: [string, CounterpartyPatch]) => repository.updateCounterparty(id, patch),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['counterparties'] }),
+      qc.invalidateQueries({ queryKey: queryKeys.invoices }),
+      qc.invalidateQueries({ queryKey: ['activity'] }),
+    ]),
+  });
 }
 
 /** 所有寫入動作；成功後統一刷新相關快取。 */

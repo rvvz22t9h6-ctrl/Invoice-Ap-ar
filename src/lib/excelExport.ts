@@ -15,7 +15,9 @@ import { AGING_BUCKETS, buildAgingReport, type AgingReport } from '@/domain/agin
 import { buildDashboard } from '@/domain/dashboard';
 import { formatDate, formatMonth } from '@/domain/dates';
 import { saveFile } from './download';
-import { APPROVAL_LABEL, TYPE_LABELS, type ComputedInvoice, type InvoiceType } from '@/domain/types';
+import { APPROVAL_LABEL, PAYMENT_KIND_LABEL, TYPE_LABELS, type CompanySettings, type ComputedInvoice, type Counterparty, type InvoiceType, type PaymentKind } from '@/domain/types';
+import { buildCashFlowForecast, type CashFlowForecast } from '@/domain/cashflow';
+import type { Statement } from '@/domain/statement';
 
 const NAVY = 'FF0F1F3D';
 const LIGHT = 'FFF1F4FA';
@@ -150,12 +152,12 @@ function addInvoiceSheet(wb: Workbook, name: string, type: InvoiceType, rows: Co
 function addPaymentsSheet(wb: Workbook, invoices: ComputedInvoice[]) {
   const ws = wb.addWorksheet('Payments', { views: [{ state: 'frozen', ySplit: 1 }] });
   printSetup(ws);
-  type Row = { inv: ComputedInvoice; date: string; amount: number; method: string; reference: string };
-  const rows: Row[] = invoices.flatMap((inv) => inv.payments.map((p) => ({ inv, date: p.paymentDate, amount: p.amount, method: p.method, reference: p.reference })))
+  type Row = { inv: ComputedInvoice; date: string; amount: number; method: string; reference: string; kind: PaymentKind };
+  const rows: Row[] = invoices.flatMap((inv) => inv.payments.map((p) => ({ inv, date: p.paymentDate, amount: p.amount, method: p.method, reference: p.reference, kind: p.kind ?? 'payment' })))
     .sort((a, b) => a.date.localeCompare(b.date));
   writeTable<Row>(ws, 1, [
     { header: 'Payment Date', width: 13, type: 'date', value: (r) => r.date },
-    { header: 'Type', width: 18, type: 'text', value: (r) => (r.inv.type === 'AR' ? 'AR – Collected' : 'AP – Paid') },
+    { header: 'Type', width: 22, type: 'text', value: (r) => (r.kind !== 'payment' ? `${r.inv.type} – ${PAYMENT_KIND_LABEL[r.kind]}` : r.inv.type === 'AR' ? 'AR – Collected' : 'AP – Paid') },
     { header: 'Invoice Number', width: 16, type: 'text', value: (r) => r.inv.invoiceNumber },
     { header: 'Customer / Supplier', width: 36, type: 'text', value: (r) => r.inv.counterpartyName },
     { header: 'Method', width: 26, type: 'text', value: (r) => r.method },
@@ -202,6 +204,8 @@ function addSummarySheet(wb: Workbook, invoices: ComputedInvoice[], today: strin
     { label: 'Overdue balance', ar: rm(d.AR.overdue), ap: rm(d.AP.overdue), money: true },
     { label: 'Collected / Paid — all time', ar: rm(d.AR.settled), ap: rm(d.AP.settled), money: true },
     { label: 'Collected / Paid — this month', ar: rm(d.AR.settledThisMonth), ap: rm(d.AP.settledThisMonth), money: true },
+    { label: 'Credit notes — all time', ar: rm(d.AR.creditNotes), ap: rm(d.AP.creditNotes), money: true },
+    { label: 'Written off (bad debt) — all time', ar: rm(d.AR.writtenOff), ap: 0, money: true },
     { label: 'Invoiced — this month', ar: rm(d.AR.invoicedThisMonth), ap: rm(d.AP.invoicedThisMonth), money: true },
     { label: 'Unpaid invoices (count)', ar: d.AR.outstandingCount, ap: d.AP.outstandingCount, money: false },
     { label: 'Overdue invoices (count)', ar: d.AR.overdueCount, ap: d.AP.overdueCount, money: false },
@@ -243,8 +247,75 @@ function addSummarySheet(wb: Workbook, invoices: ComputedInvoice[], today: strin
 // 對外函式
 // ---------------------------------------------------------------------------
 
-/** 完整報表：摘要 + AP + AR + 付款 + 帳齡。 */
-export async function buildFullReport(invoices: ComputedInvoice[], today: string, companyName?: string): Promise<Workbook> {
+function addCashFlowSheet(wb: Workbook, f: CashFlowForecast, today: string, companyName?: string) {
+  const ws = wb.addWorksheet('Cash Flow Forecast', { views: [{ state: 'frozen', ySplit: 4 }] });
+  printSetup(ws, true, false);
+  ws.getCell('A1').value = `${companyName ? `${companyName} — ` : ''}Cash Flow Forecast (next ${f.rows.length - 1} weeks)`;
+  ws.getCell('A1').font = { bold: true, size: 14, color: { argb: NAVY } };
+  ws.getCell('A2').value = `As of ${formatDate(today)}. Starting balance ${f.hasOpeningBalance ? 'from your opening bank balance plus payments recorded since then' : 'is RM 0 (no opening bank balance set)'}. Assumes each open invoice is settled on its due date.`;
+  ws.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
+  type R = CashFlowForecast['rows'][number];
+  const start: R = { key: 'start', label: 'Starting balance (today)', start: null, end: null, inflow: 0, outflow: 0, net: 0, closing: f.currentBalance, inflowCount: 0, outflowCount: 0 };
+  writeTable<R>(ws, 4, [
+    { header: 'Period', width: 30, type: 'text', value: (r) => r.label },
+    { header: 'Expected receipts (AR)', width: 22, type: 'money', value: (r) => rm(r.inflow), total: true },
+    { header: 'Expected payments (AP)', width: 22, type: 'money', value: (r) => rm(r.outflow), total: true },
+    { header: 'Net', width: 18, type: 'money', value: (r) => rm(r.net), total: true },
+    { header: 'Projected balance', width: 20, type: 'money', value: (r) => rm(r.closing) },
+  ], [start, ...f.rows], { totalLabel: 'Total' });
+}
+
+/** 現金流預測活頁簿。 */
+export async function buildCashFlowWorkbook(f: CashFlowForecast, today: string, companyName?: string): Promise<Workbook> {
+  const wb = await newWorkbook();
+  addCashFlowSheet(wb, f, today, companyName);
+  return wb;
+}
+
+/** 對帳單活頁簿。 */
+export async function buildStatementWorkbook(st: Statement, type: InvoiceType, companyName?: string, contact?: Counterparty): Promise<Workbook> {
+  const wb = await newWorkbook();
+  const ws = wb.addWorksheet('Statement', { views: [{ showGridLines: false }] });
+  printSetup(ws, false, false);
+  ws.getCell('A1').value = companyName || 'Statement of Account';
+  ws.getCell('A1').font = { bold: true, size: 16, color: { argb: NAVY } };
+  ws.getCell('A2').value = 'STATEMENT OF ACCOUNT';
+  ws.getCell('A2').font = { bold: true, size: 11, color: { argb: 'FF64748B' } };
+  ws.getCell('A4').value = `${TYPE_LABELS[type].party}: ${st.counterpartyName}`;
+  ws.getCell('A4').font = { bold: true };
+  const info = [contact?.contactPerson && `Attn: ${contact.contactPerson}`, contact?.address, [contact?.phone, contact?.email].filter(Boolean).join(' · ')].filter(Boolean) as string[];
+  info.forEach((t, i) => { ws.getCell(`A${5 + i}`).value = t; });
+  const r0 = 6 + info.length;
+  ws.getCell(`A${r0}`).value = `Period: ${formatDate(st.from)} to ${formatDate(st.to)}`;
+  ws.getCell(`A${r0 + 1}`).value = `Opening balance: RM ${(st.openingBalance / 100).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;
+  type L = Statement['lines'][number];
+  const open: L = { date: st.from, kind: 'invoice', reference: '', description: 'Balance brought forward', dueDate: null, debit: 0, credit: 0, balance: st.openingBalance };
+  let r = writeTable<L>(ws, r0 + 3, [
+    { header: 'Date', width: 13, type: 'date', value: (l) => l.date },
+    { header: 'Invoice No.', width: 16, type: 'text', value: (l) => l.reference },
+    { header: 'Description', width: 40, type: 'text', value: (l) => l.description },
+    { header: 'Due Date', width: 13, type: 'date', value: (l) => l.dueDate },
+    { header: 'Debit (RM)', width: 15, type: 'money', value: (l) => rm(l.debit), total: true },
+    { header: 'Credit (RM)', width: 15, type: 'money', value: (l) => rm(l.credit), total: true },
+    { header: 'Balance (RM)', width: 16, type: 'money', value: (l) => rm(l.balance) },
+  ], [open, ...st.lines], { totalLabel: 'Total' });
+  const close = ws.getRow(r);
+  close.values = ['Closing balance', '', '', '', '', '', rm(st.closingBalance)];
+  close.font = { bold: true };
+  close.getCell(7).numFmt = MONEY_FMT;
+  r += 2;
+  ws.getCell(`A${r}`).value = 'Ageing of outstanding balance (as of today)';
+  ws.getCell(`A${r}`).font = { bold: true, color: { argb: NAVY } };
+  ws.getRow(r + 1).values = AGING_BUCKETS.map((b) => b.label);
+  styleHeader(ws, r + 1, AGING_BUCKETS.length);
+  const ar = ws.getRow(r + 2);
+  ar.values = AGING_BUCKETS.map((b) => rm(st.aging[b.key]));
+  AGING_BUCKETS.forEach((_, i) => { ar.getCell(i + 1).numFmt = MONEY_FMT; });
+  return wb;
+}
+
+/** 完整報表：摘要 + AP + AR + 付款 + 帳齡 + 現金流。 */
+export async function buildFullReport(invoices: ComputedInvoice[], today: string, companyName?: string, settings?: Pick<CompanySettings, 'openingBalance' | 'openingBalanceDate'>): Promise<Workbook> {
   const wb = await newWorkbook();
   addSummarySheet(wb, invoices, today, companyName);
   addInvoiceSheet(wb, 'AR Invoices', 'AR', invoices.filter((i) => i.type === 'AR'));
@@ -252,6 +323,7 @@ export async function buildFullReport(invoices: ComputedInvoice[], today: string
   addPaymentsSheet(wb, invoices);
   addAgingSheet(wb, 'AR Aging', buildAgingReport(invoices, 'AR'));
   addAgingSheet(wb, 'AP Aging', buildAgingReport(invoices, 'AP'));
+  addCashFlowSheet(wb, buildCashFlowForecast(invoices, today, settings ?? { openingBalance: 0, openingBalanceDate: null }), today, companyName);
   return wb;
 }
 

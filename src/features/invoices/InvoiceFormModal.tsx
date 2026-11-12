@@ -9,11 +9,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Modal, SelectInput, TextArea, TextInput } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { addDays, daysBetween } from '@/domain/dates';
+import { addDays, daysBetween, isValidIsoDate } from '@/domain/dates';
 import { formatMYR, senToDecimalString, taxFromRate, toSen } from '@/domain/money';
 import { kindForType, TYPE_LABELS, type ComputedInvoice, type InvoiceType } from '@/domain/types';
-import { DomainError, fieldErrors, findDuplicateInvoice, invoiceFormSchema, type InvoiceFormInput } from '@/domain/validation';
-import { useCounterparties, useInvoiceMutations, useInvoices } from '@/hooks/useFinanceData';
+import { DomainError, fieldErrors, findDuplicateInvoice, invoiceFormSchema, normalizeName, type InvoiceFormInput } from '@/domain/validation';
+import { useCounterparties, useInvoiceMutations, useInvoices, useSettings } from '@/hooks/useFinanceData';
 import type { Attachment } from '@/domain/types';
 import { AttachmentError, attachmentsEnabled, autoFillEnabled, deleteAttachmentFile, extractInvoiceDetails, uploadAttachment } from '@/lib/attachments';
 import { AttachmentDrop, AttachmentList } from './AttachmentDrop';
@@ -43,13 +43,22 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
   const { invoices, today } = useInvoices();
   const parties = useCounterparties(kindForType(type));
   const { create, update, addAttachment } = useInvoiceMutations();
+  const { settings } = useSettings();
+  const defaultTerms = type === 'AR' ? settings.defaultTermsAR : settings.defaultTermsAP;
+  /** 使用者是否手動改過到期日；改過就不再自動帶入付款期限。 */
+  const dueTouched = useRef(isEdit);
+  /** 依對象的預設付款期限（沒有則用公司預設）計算到期日。 */
+  const termsFor = (name: string) => {
+    const cp = parties.data?.find((p) => normalizeName(p.name) === normalizeName(name));
+    return cp?.paymentTermsDays ?? defaultTerms;
+  };
   const toast = useToast();
 
   const [values, setValues] = useState<Required<InvoiceFormInput>>(() => ({
     invoiceNumber: invoice?.invoiceNumber ?? '',
     counterpartyName: invoice?.counterpartyName ?? '',
     invoiceDate: invoice?.invoiceDate ?? today,
-    dueDate: invoice?.dueDate ?? addDays(today, 30),
+    dueDate: invoice?.dueDate ?? addDays(today, type === 'AR' ? settings.defaultTermsAR : settings.defaultTermsAP),
     description: invoice?.description ?? '',
     invoiceAmount: invoice ? senToDecimalString(invoice.invoiceAmount) : '',
     taxAmount: invoice ? senToDecimalString(invoice.taxAmount) : '0.00',
@@ -97,6 +106,8 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
         setReadNote({ tone: 'warning', text: `${file.name} is attached, but no invoice details were found in it. Please fill them in.`, warnings: [] });
         return;
       }
+      // 附件上讀到的到期日視同使用者輸入，不再依付款期限自動改寫
+      if (fields.dueDate) dueTouched.current = true;
       setValues((v) => ({ ...v, ...fields }));
       // 稅額若剛好等於某個 SST 稅率，就選該稅率；否則設為自訂
       const amt = toSen(fields.invoiceAmount ?? values.invoiceAmount);
@@ -117,6 +128,14 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
     }
   };
 
+  // 對象清單或公司設定較晚載入時，重新套用付款期限（使用者手動改過到期日則不動）
+  useEffect(() => {
+    if (dueTouched.current || !isValidIsoDate(values.invoiceDate)) return;
+    const due = addDays(values.invoiceDate, termsFor(values.counterpartyName));
+    if (due !== values.dueDate) setValues((v) => ({ ...v, dueDate: due }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parties.data, defaultTerms, values.counterpartyName, values.invoiceDate]);
+
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return; // React 開發模式會執行兩次 effect，避免重複上傳
@@ -135,6 +154,12 @@ export function InvoiceFormModal({ type, invoice, open, onClose, onSaved, initia
   const set = (field: keyof InvoiceFormInput, value: string) => {
     setValues((v) => {
       const next = { ...v, [field]: value };
+      if (field === 'dueDate') dueTouched.current = true;
+      // 尚未手動設定到期日時：依對象的付款期限自動計算
+      if ((field === 'counterpartyName' || field === 'invoiceDate') && !dueTouched.current) {
+        const d = field === 'invoiceDate' ? value : v.invoiceDate;
+        if (isValidIsoDate(d)) next.dueDate = addDays(d, termsFor(field === 'counterpartyName' ? value : v.counterpartyName));
+      }
       // 選了稅率時，金額變動會自動重算稅額
       if (field === 'invoiceAmount' && rate !== 'custom') {
         const amt = toSen(value);

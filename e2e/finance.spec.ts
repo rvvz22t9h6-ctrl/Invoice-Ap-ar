@@ -367,7 +367,7 @@ test.describe('Excel export', () => {
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-full-report').click()]);
     expect(download.suggestedFilename()).toBe(`Finance-Report-${today}.xlsx`);
     const wb = await readXlsx(download);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'AR Invoices', 'AP Invoices', 'Payments', 'AR Aging', 'AP Aging']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'AR Invoices', 'AP Invoices', 'Payments', 'AR Aging', 'AP Aging', 'Cash Flow Forecast']);
     const summary = wb.getWorksheet('Summary')!;
     let outstanding: ExcelJS.Row | undefined;
     summary.eachRow((r) => { if (r.getCell(1).value === 'Outstanding balance') outstanding = r; });

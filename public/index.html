@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f3a5f">
+  <title>Invoice Tracker</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Sign in -->
+  <section id="login-view" class="login hidden">
+    <form id="login-form" class="login-card">
+      <img class="brand-mark" src="/favicon.svg" alt="">
+      <h1>Invoice Tracker</h1>
+      <p class="muted">Accounts receivable &amp; payable status</p>
+      <label>Username <input name="username" autocomplete="username" required autofocus></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="form-error" id="login-error"></p>
+      <button class="btn primary block" type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <!-- App shell -->
+  <div id="app-view" class="shell hidden">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark small" src="/favicon.svg" alt="">
+        <span id="company-name">Invoice Tracker</span>
+      </div>
+      <nav class="tabs" id="tabs">
+        <a href="#dashboard" data-view="dashboard">Dashboard</a>
+        <a href="#AR" data-view="AR">Receivables</a>
+        <a href="#AP" data-view="AP">Payables</a>
+        <a href="#users" data-view="users" class="admin-only">Users</a>
+        <a href="#account" data-view="account">Account</a>
+      </nav>
+      <div class="whoami"><span id="whoami"></span> <button class="btn ghost small" id="logout">Sign out</button></div>
+    </header>
+
+    <main id="main"></main>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="modal-title"></h2>
+        <button class="btn ghost small" data-close aria-label="Close">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

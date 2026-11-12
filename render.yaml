@@ -1,0 +1,20 @@
+# One-click deploy on Render (https://render.com) — "New > Blueprint" and pick this repo.
+services:
+  - type: web
+    name: invoice-ap-ar
+    runtime: docker
+    plan: starter            # a paid plan is needed for the persistent disk below
+    healthCheckPath: /
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: SECURE_COOKIES
+        value: "true"
+      - key: TIMEZONE
+        value: Asia/Kuala_Lumpur   # change to your company's time zone
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false                # you'll be asked for it when deploying

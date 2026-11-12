@@ -1,0 +1,15 @@
+{
+  "name": "invoice-ap-ar",
+  "version": "1.0.0",
+  "description": "Company invoice and AP/AR payment status tracker with read-only access for management",
+  "main": "server.js",
+  "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

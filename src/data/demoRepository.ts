@@ -17,6 +17,7 @@ import { newTask, validateTaskInput, withStatus, type Task, type TaskInput, type
 import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
 import { RULE_TEMPLATES } from '@/domain/taskTemplates';
 import type { Checklist } from '@/domain/checklists';
+import { isValidClaimRecord, type StaffClaim } from '@/domain/claims';
 import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
@@ -49,6 +50,8 @@ export interface DemoState {
   recurrences?: RecurrenceRule[];
   /** 薪資與月結檢查清單。 */
   checklists?: Checklist[];
+  /** 員工報銷。 */
+  claims?: StaffClaim[];
 }
 
 /** 備份檔格式。 */
@@ -108,7 +111,32 @@ export function buildInitialDemoState(today: IsoDate): DemoState {
   // 範例公司設定：期初餘額設在 30 天前，讓現金流預測有合理起點
   const settings: CompanySettings = { ...DEFAULT_SETTINGS, companyName: 'Sample Trading Sdn Bhd', openingBalance: 18_500_000, openingBalanceDate: addDays(today, -30) };
   const { tasks, recurrences } = buildSampleTasks(today);
-  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null, settings, tasks, recurrences };
+  return { version: STATE_VERSION, counterparties, invoices, activity, isSample: true, modifiedAt: null, settings, tasks, recurrences, claims: buildSampleClaims(today) };
+}
+
+/** 範例報銷：幾位員工、不同狀態，讓報銷頁面一開始就有內容。 */
+function buildSampleClaims(today: IsoDate): StaffClaim[] {
+  const now = new Date().toISOString();
+  const rows: [string, number, StaffClaim['category'], string, number, StaffClaim['status'], boolean, number | null][] = [
+    ['Ahmad Faizal', -12, 'Mileage', 'Office to Shah Alam client visit, return', 0, 'paid', false, 64],
+    ['Ahmad Faizal', -5, 'Parking & Toll', 'Toll and parking, Shah Alam visit', 2350, 'approved', true, null],
+    ['Siti Hajar', -8, 'Meals & Entertainment', 'Lunch with Gemilang Retail buyer', 18600, 'approved', true, null],
+    ['Siti Hajar', -3, 'Medical', 'Clinic visit, fever', 9500, 'submitted', true, null],
+    ['Kumar Raj', -2, 'Office Supplies', 'Printer toner (urgent)', 32900, 'submitted', false, null],
+    ['Kumar Raj', -20, 'Petrol', 'Petrol for company van', 15000, 'rejected', false, null],
+    ['Lim Wei Jie', -1, 'Phone & Internet', 'Mobile data top-up, site work', 3000, 'submitted', true, null],
+  ];
+  return rows.map(([staffName, off, category, description, amt, status, hasReceipt, km], i): StaffClaim => {
+    const submittedOn = addDays(today, Math.min(0, off + 1));
+    const amount = km ? Math.round(km * 60) : amt;
+    return {
+      id: `sample-claim-${i}`, claimNo: `CL-${submittedOn.slice(2, 4)}${submittedOn.slice(5, 7)}-${String(i + 1).padStart(3, '0')}`, staffName, expenseDate: addDays(today, off),
+      category, description, amount, mileageKm: km, ratePerKm: km ? 60 : null, hasReceipt, receipt: null, status,
+      decidedOn: status === 'submitted' ? null : submittedOn, rejectReason: status === 'rejected' ? 'No receipt attached. Please resubmit with the petrol receipt.' : '',
+      paidDate: status === 'paid' ? submittedOn : null, payMethod: status === 'paid' ? 'Bank transfer' : null, paymentRef: status === 'paid' ? 'IBG 88213' : '',
+      remarks: '', submittedOn, createdAt: now, updatedAt: now,
+    };
+  });
 }
 
 /**
@@ -572,6 +600,33 @@ export class DemoRepository implements Repository {
     if (i >= 0) list[i] = next; else list.push(next);
     this.commit();
     return this.delay(next);
+  }
+
+  // ---------- 員工報銷 ----------
+
+  async listClaims() {
+    this.require();
+    return this.delay([...(this.state.claims ?? [])]);
+  }
+
+  async saveClaims(claims: StaffClaim[]) {
+    this.require('admin', 'finance');
+    if (!claims.every(isValidClaimRecord)) throw new DomainError('VALIDATION', 'Invalid claim');
+    const list = (this.state.claims ??= []);
+    for (const c of claims) {
+      const next = { ...c, updatedAt: new Date().toISOString() };
+      const i = list.findIndex((x) => x.id === c.id);
+      if (i >= 0) list[i] = next; else list.push(next);
+    }
+    this.commit();
+    await this.delay(undefined);
+  }
+
+  async deleteClaim(id: string) {
+    this.require('admin', 'finance');
+    this.state.claims = (this.state.claims ?? []).filter((c) => c.id !== id);
+    this.commit();
+    await this.delay(undefined);
   }
 
   async resetDemoData() {

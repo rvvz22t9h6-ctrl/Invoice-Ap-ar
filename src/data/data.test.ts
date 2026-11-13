@@ -7,6 +7,7 @@ import { computeInvoices } from '@/domain/invoice';
 import { invoiceFormSchema, paymentFormSchema } from '@/domain/validation';
 import { DemoRepository, memoryStore } from './demoRepository';
 import { newChecklist, toggleItem } from '@/domain/checklists';
+import { approveClaim, newClaim, payClaim, validateClaim } from '@/domain/claims';
 import { toDomainError } from './supabaseRepository';
 
 const TODAY = '2026-11-12';
@@ -305,6 +306,31 @@ describe('Payroll and closing checklists', () => {
     const inv = await repo.createInvoice('AR', form({ invoiceNumber: 'RM-1', remarks: 'Call on Friday' }));
     expect(inv.remarks).toBe('Call on Friday');
     expect((await repo.updateInvoice(inv.id, form({ invoiceNumber: 'RM-1', remarks: '' }))).remarks).toBe('');
+  });
+});
+
+describe('Staff claims', () => {
+  it('saves, updates in a batch and deletes claims; viewer cannot change them', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const before = (await repo.listClaims()).length;
+    const v = validateClaim({ staffName: 'Ali', expenseDate: TODAY, category: 'Petrol', description: 'Fuel', amount: '50', mileageKm: '', ratePerKm: '', hasReceipt: true, remarks: '' }, TODAY);
+    if (!v.ok) throw new Error('invalid');
+    const a = newClaim(v.value, await repo.listClaims(), TODAY, new Date().toISOString(), 'claim-a');
+    const b = newClaim(v.value, [a], TODAY, new Date().toISOString(), 'claim-b');
+    expect(b.claimNo).not.toBe(a.claimNo);
+    await repo.saveClaims([a, b]);
+    expect(await repo.listClaims()).toHaveLength(before + 2);
+    const paid = payClaim(approveClaim(a, TODAY, ''), { paidDate: TODAY, payMethod: 'With salary', paymentRef: '' }, '');
+    await repo.saveClaims([paid, approveClaim(b, TODAY, '')]);
+    const list = await repo.listClaims();
+    expect(list.find((c) => c.id === 'claim-a')!.status).toBe('paid');
+    expect(list.find((c) => c.id === 'claim-b')!.status).toBe('approved');
+    await expect(repo.saveClaims([{ ...a, amount: 0 }])).rejects.toThrow(/Invalid/);
+    await repo.deleteClaim('claim-b');
+    expect((await repo.listClaims()).some((c) => c.id === 'claim-b')).toBe(false);
+    await repo.signIn('boss@demo.my', 'demo1234');
+    await expect(repo.saveClaims([a])).rejects.toThrow(/read-only/);
+    await expect(repo.deleteClaim('claim-a')).rejects.toThrow(/read-only/);
   });
 });
 

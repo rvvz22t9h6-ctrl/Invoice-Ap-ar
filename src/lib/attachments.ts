@@ -10,6 +10,7 @@
  */
 import { buildExtractionPrompt, normalizeExtraction, type ExtractionResult } from '@/domain/extraction';
 import type { Attachment, InvoiceType } from '@/domain/types';
+import { buildReceiptPrompt, normalizeReceipt, type ReceiptExtraction } from '@/domain/claims';
 
 interface AssetsCap {
   upload(blob: Blob, options?: { type?: string }): Promise<{ id: string; url: string; sizeBytes: number; contentType: string }>;
@@ -109,8 +110,18 @@ async function readPdf(file: File): Promise<{ text: string; image: Blob | null }
   return { text: parts.join('\n').replace(/[ \t]+/g, ' ').trim(), image };
 }
 
+/** 讀取收據並擷取報銷欄位。 */
+export async function extractReceiptDetails(file: File, today: string): Promise<ReceiptExtraction> {
+  return readWithClaude(file, (text, hasImage) => buildReceiptPrompt(text, hasImage), (raw) => normalizeReceipt(raw, today));
+}
+
 /** 讀取附件並擷取發票欄位。 */
 export async function extractInvoiceDetails(file: File, type: InvoiceType): Promise<ExtractionResult> {
+  return readWithClaude(file, (text, hasImage) => buildExtractionPrompt(type, text, hasImage), normalizeExtraction);
+}
+
+/** 共用：讀出 PDF 文字／圖片（或照片），交給 Claude 擷取，再整理結果。 */
+async function readWithClaude<T>(file: File, prompt: (text: string, hasImage: boolean) => string, normalize: (raw: unknown) => T): Promise<T> {
   if (!sample) throw new AttachmentError('Auto-fill is not available here.');
   const mime = typeOf(file);
   let text = '';
@@ -132,8 +143,8 @@ export async function extractInvoiceDetails(file: File, type: InvoiceType): Prom
       : 'Photos cannot be read here. Upload a PDF, or fill in the details manually.');
   }
   try {
-    const raw = await sample.json(buildExtractionPrompt(type, text, canSendImage), canSendImage ? { images: [image!], modelTier: 'default' } : { modelTier: 'default' });
-    return normalizeExtraction(raw);
+    const raw = await sample.json(prompt(text, canSendImage), canSendImage ? { images: [image!], modelTier: 'default' } : { modelTier: 'default' });
+    return normalize(raw);
   } catch (e) {
     if (e instanceof AttachmentError) throw e;
     const code = (e as { code?: string })?.code;

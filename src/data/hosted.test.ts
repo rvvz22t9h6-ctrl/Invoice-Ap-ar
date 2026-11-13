@@ -7,6 +7,7 @@ import { todayIso } from '@/domain/dates';
 import { HostedRepository, shardInvoices, type HostedDb, type HostedUser } from './hostedRepository';
 import { buildInitialDemoState } from './demoRepository';
 import { newChecklist } from '@/domain/checklists';
+import { newClaim, validateClaim } from '@/domain/claims';
 
 /** 模擬 db：文件存在 Map 中，並記錄寫入次數。 */
 function fakeDb() {
@@ -124,6 +125,36 @@ describe('HostedRepository checklists', () => {
     await repo.whenSaved();
     expect(docs.has('checklists/2026-10')).toBe(true);
     expect((await (await HostedRepository.create(db, owner)).listChecklists())[0]!.id).toBe('closing-2026-10');
+  });
+});
+
+describe('HostedRepository staff claims', () => {
+  it('stores claims by expense month and reloads them', async () => {
+    const { db, docs } = fakeDb();
+    const repo = await HostedRepository.create(db, owner);
+    const v = validateClaim({ staffName: 'Ali', expenseDate: '2026-10-30', category: 'Mileage', description: 'Site visit', amount: '', mileageKm: '40', ratePerKm: '0.60', hasReceipt: false, remarks: '' }, today);
+    if (!v.ok) throw new Error('invalid');
+    await repo.saveClaims([newClaim(v.value, [], today, new Date().toISOString(), 'k1')]);
+    await repo.whenSaved();
+    expect(docs.has('claims/2026-10')).toBe(true);
+    const again = await HostedRepository.create(db, owner);
+    expect((await again.listClaims())[0]).toMatchObject({ id: 'k1', amount: 2400, mileageKm: 40 });
+    await again.deleteClaim('k1');
+    await again.whenSaved();
+    expect(docs.has('claims/2026-10')).toBe(false); // 月份變空 → 文件刪除
+  });
+
+  it('after a reload, deleting the last task of a month removes that month from the cloud', async () => {
+    const { db, docs } = fakeDb();
+    const repo = await HostedRepository.create(db, owner);
+    const t = await repo.saveTask({ title: 'Only task', category: 'GL', priority: 'Low', dueDate: '2027-03-15' });
+    await repo.whenSaved();
+    expect(docs.has('tasks/2027-03')).toBe(true);
+    const again = await HostedRepository.create(db, owner);
+    await again.deleteTask(t.id);
+    await again.whenSaved();
+    expect(docs.has('tasks/2027-03')).toBe(false);
+    expect((await (await HostedRepository.create(db, owner)).listTasks()).some((x) => x.id === t.id)).toBe(false);
   });
 });
 

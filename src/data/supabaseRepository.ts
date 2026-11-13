@@ -17,6 +17,7 @@ import type { CounterpartyPatch, RecurrenceInput, Repository } from './repositor
 import { validateTaskInput, type Task, type TaskCategory, type TaskInput, type TaskPriority, type TaskStatus } from '@/domain/tasks';
 import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
+import type { StaffClaim } from '@/domain/claims';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
@@ -368,7 +369,42 @@ export class SupabaseRepository implements Repository {
     check(await this.db.from('checklists').upsert({ id: c.id, kind: c.kind, month: c.month, items: c.items, remarks: c.remarks, due_date: c.dueDate, updated_at: new Date().toISOString() }).select('id'));
     return c;
   }
+
+  // ---------- 員工報銷 ----------
+
+  async listClaims() {
+    const rows = check(await this.db.from('staff_claims').select('*').order('expense_date', { ascending: false })) as ClaimRow[];
+    return rows.map(claimFromRow);
+  }
+
+  async saveClaims(claims: StaffClaim[]) {
+    if (!claims.length) return;
+    check(await this.db.from('staff_claims').upsert(claims.map(claimToRow)).select('id'));
+  }
+
+  async deleteClaim(id: string) {
+    check(await this.db.from('staff_claims').delete().eq('id', id).select('id'));
+  }
 }
+
+interface ClaimRow {
+  id: string; claim_no: string; staff_name: string; expense_date: string; category: StaffClaim['category']; description: string; amount_sen: number | string;
+  mileage_km: number | string | null; rate_per_km_sen: number | null; has_receipt: boolean; receipt: StaffClaim['receipt']; status: StaffClaim['status'];
+  decided_on: string | null; reject_reason: string; paid_date: string | null; pay_method: StaffClaim['payMethod']; payment_ref: string; remarks: string;
+  submitted_on: string; created_at: string; updated_at: string;
+}
+const claimFromRow = (r: ClaimRow): StaffClaim => ({
+  id: r.id, claimNo: r.claim_no, staffName: r.staff_name, expenseDate: r.expense_date, category: r.category, description: r.description, amount: Number(r.amount_sen),
+  mileageKm: r.mileage_km === null ? null : Number(r.mileage_km), ratePerKm: r.rate_per_km_sen, hasReceipt: r.has_receipt, receipt: r.receipt ?? null, status: r.status,
+  decidedOn: r.decided_on, rejectReason: r.reject_reason, paidDate: r.paid_date, payMethod: r.pay_method, paymentRef: r.payment_ref, remarks: r.remarks,
+  submittedOn: r.submitted_on, createdAt: r.created_at, updatedAt: r.updated_at,
+});
+const claimToRow = (c: StaffClaim) => ({
+  id: c.id, claim_no: c.claimNo, staff_name: c.staffName, expense_date: c.expenseDate, category: c.category, description: c.description, amount_sen: c.amount,
+  mileage_km: c.mileageKm, rate_per_km_sen: c.ratePerKm, has_receipt: c.hasReceipt, receipt: c.receipt, status: c.status, decided_on: c.decidedOn,
+  reject_reason: c.rejectReason, paid_date: c.paidDate, pay_method: c.payMethod, payment_ref: c.paymentRef, remarks: c.remarks, submitted_on: c.submittedOn,
+  updated_at: new Date().toISOString(),
+});
 
 interface ChecklistRow { id: string; kind: Checklist['kind']; month: string; items: Checklist['items']; remarks: string; due_date: string; created_at: string; updated_at: string }
 

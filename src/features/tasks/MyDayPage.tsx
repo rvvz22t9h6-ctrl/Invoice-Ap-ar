@@ -16,6 +16,9 @@ import { NotificationToggle, ReminderList } from './ReminderCentre';
 import { ChecklistStatusBadge, useChecklists } from '@/features/checklists/ChecklistPage';
 import { checklistId, checklistProgress, checklistStatus, defaultMonth, monthName, newChecklist } from '@/domain/checklists';
 import { QuickAdd, TaskFormModal, TaskList } from './TaskParts';
+import { useClaims } from '@/features/claims/ClaimsPage';
+import { claimTotals } from '@/domain/claims';
+import { formatMYR } from '@/domain/money';
 
 export function MyDayPage() {
   const { tasks, isLoading } = useTasks();
@@ -24,6 +27,8 @@ export function MyDayPage() {
   const [open, setOpen] = useState<Task | null>(null);
   const [creating, setCreating] = useState(false);
   const { checklists } = useChecklists();
+  const { claims } = useClaims();
+  const claimSum = useMemo(() => claimTotals(claims, today), [claims, today]);
   const o = useMemo(() => buildTaskOverview(tasks, today), [tasks, today]);
   const reminders = useMemo(() => buildReminders(tasks, today), [tasks, today]);
   const p = useMemo(() => buildProductivity(tasks, today), [tasks, today]);
@@ -39,7 +44,7 @@ export function MyDayPage() {
         subtitle="Your tasks for today. Unfinished tasks carry forward with their original due dates until you complete them." />
 
       {/* 本月薪資與月結進度：一眼看到，點一下進入 */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="month-strip">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="month-strip">
         {(['payroll', 'closing'] as const).map((kind) => {
           const month = defaultMonth(kind, today);
           const c = checklists.find((x) => x.id === checklistId(kind, month)) ?? newChecklist(kind, month, '');
@@ -57,6 +62,15 @@ export function MyDayPage() {
             </Link>
           );
         })}
+        <Link to="/claims" data-testid="strip-claims" className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-navy-200 hover:bg-navy-50/40">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Staff claims</p>
+            <p className="tabular mt-1 text-base font-semibold text-slate-900">{formatMYR(claimSum.toPay.total)} <span className="text-xs font-normal text-slate-500">to pay</span></p>
+            <p className="text-xs text-slate-500">{claimSum.toApprove.count} to approve · {claimSum.toPay.count} approved</p>
+          </div>
+          {claimSum.toApprove.count > 0 ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">{claimSum.toApprove.count} new</span>
+            : <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-300">✓ Up to date</span>}
+        </Link>
       </div>
 
       {canEdit && <Card className="mb-6"><QuickAdd /></Card>}

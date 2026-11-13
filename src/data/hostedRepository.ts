@@ -14,6 +14,7 @@
  *   tasks/<YYYY-MM>[~n]     每日工作任務（依到期月份分組）
  *   meta/recurrences        週期任務規則
  *   checklists/<YYYY-MM>    薪資與月結檢查清單（每月一份文件）
+ *   claims/<YYYY-MM>        員工報銷（依支出月份分組）
  *
  * 寫入策略：每次變更後比對各文件內容，只寫入有變動的文件；
  * 同一時間只進行一個寫入（依序排隊），並把狀態回報給畫面（儲存中／已儲存／失敗）。
@@ -24,6 +25,7 @@ import { DEFAULT_SETTINGS } from '@/domain/types';
 import type { Task } from '@/domain/tasks';
 import type { RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
+import type { StaffClaim } from '@/domain/claims';
 import { DemoRepository, memoryStore, STATE_VERSION, type DemoState } from './demoRepository';
 
 // ---------- 平台 db 介面（僅列出用到的部分）----------
@@ -124,12 +126,22 @@ export class HostedRepository extends DemoRepository {
       this.db.doc('meta/recurrences').get(),
       this.db.collection('checklists').limit(1000).get(),
     ]);
+    const claimShards = await this.db.collection('claims').limit(1000).get();
+    // 記錄雲端已有的文件（用來比對差異，並刪除變空的月份文件）
+    this.written.clear();
     const checklists: Checklist[] = [];
     for (const d of checklistShards.docs) {
       const body = d.data() as { items?: Checklist[] } | undefined;
       if (!body?.items) continue;
       checklists.push(...body.items);
       this.written.set(`checklists/${d.id}`, JSON.stringify({ items: body.items }));
+    }
+    const claims: StaffClaim[] = [];
+    for (const d of claimShards.docs) {
+      const body = d.data() as { items?: StaffClaim[] } | undefined;
+      if (!body?.items) continue;
+      claims.push(...body.items);
+      this.written.set(`claims/${d.id}`, JSON.stringify({ items: body.items }));
     }
     const tasks: Task[] = [];
     for (const d of taskShards.docs) {
@@ -143,7 +155,6 @@ export class HostedRepository extends DemoRepository {
     const settings = settingsDoc.data() as CompanySettings | undefined;
     if (settingsDoc.exists) this.written.set('meta/settings', JSON.stringify(settings));
     const invoices: InvoiceRecord[] = [];
-    this.written.clear();
     for (const d of shards.docs) {
       const body = d.data() as { items?: InvoiceRecord[] } | undefined;
       if (!body?.items) continue;
@@ -157,7 +168,7 @@ export class HostedRepository extends DemoRepository {
     if (act.exists) this.written.set('meta/activity', JSON.stringify({ items: activity }));
     if (info.exists) this.written.set('meta/info', JSON.stringify({ isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null }));
     // 雲端是空的 → 從空白開始（不自動放入範例資料）
-    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined, tasks, recurrences, checklists };
+    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined, tasks, recurrences, checklists, claims };
   }
 
   // ---------- 儲存 ----------
@@ -187,6 +198,7 @@ export class HostedRepository extends DemoRepository {
     // 任務依到期月份分組；週期規則存在單一文件
     for (const [key, items] of shardByMonth(this.state.tasks ?? [], (t) => t.dueDate)) desired.set(`tasks/${key}`, JSON.stringify({ items }));
     for (const [key, items] of shardByMonth(this.state.checklists ?? [], (c) => `${c.month}-01`)) desired.set(`checklists/${key}`, JSON.stringify({ items }));
+    for (const [key, items] of shardByMonth(this.state.claims ?? [], (c) => c.expenseDate)) desired.set(`claims/${key}`, JSON.stringify({ items }));
     if (this.state.recurrences?.length || this.written.has('meta/recurrences')) desired.set('meta/recurrences', JSON.stringify({ items: this.state.recurrences ?? [] }));
     desired.set('meta/info', JSON.stringify({ isSample: this.state.isSample !== false, modifiedAt: this.state.modifiedAt ?? null }));
     try {

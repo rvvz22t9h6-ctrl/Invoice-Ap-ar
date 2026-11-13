@@ -18,6 +18,7 @@ import { saveFile } from './download';
 import { APPROVAL_LABEL, PAYMENT_KIND_LABEL, TYPE_LABELS, type CompanySettings, type ComputedInvoice, type Counterparty, type InvoiceType, type PaymentKind } from '@/domain/types';
 import { buildCashFlowForecast, type CashFlowForecast } from '@/domain/cashflow';
 import type { Statement } from '@/domain/statement';
+import { CLAIM_STATUS_LABEL, claimFlags, summaryByStaff, type StaffClaim } from '@/domain/claims';
 
 const NAVY = 'FF0F1F3D';
 const LIGHT = 'FFF1F4FA';
@@ -339,6 +340,47 @@ export async function buildInvoiceListWorkbook(rows: ComputedInvoice[], type: In
 export async function buildAgingWorkbook(report: AgingReport): Promise<Workbook> {
   const wb = await newWorkbook();
   addAgingSheet(wb, `${report.type} Aging`, report);
+  return wb;
+}
+
+/**
+ * 員工報銷活頁簿：
+ *   - Claims：目前畫面篩選的清單（含狀態、付款資料、提醒）
+ *   - To Pay by Staff：已核准待付款，依員工合計（可直接加入薪資）
+ */
+export async function buildClaimsWorkbook(rows: StaffClaim[], all: StaffClaim[], today: string, companyName?: string): Promise<Workbook> {
+  const wb = await newWorkbook();
+  const ws = wb.addWorksheet('Claims', { views: [{ state: 'frozen', ySplit: 1 }] });
+  printSetup(ws);
+  const sorted = [...rows].sort((a, b) => a.expenseDate.localeCompare(b.expenseDate) || a.claimNo.localeCompare(b.claimNo));
+  writeTable<StaffClaim>(ws, 1, [
+    { header: 'Claim No.', width: 14, type: 'text', value: (c) => c.claimNo },
+    { header: 'Expense Date', width: 13, type: 'date', value: (c) => c.expenseDate },
+    { header: 'Staff', width: 22, type: 'text', value: (c) => c.staffName },
+    { header: 'Category', width: 20, type: 'text', value: (c) => c.category },
+    { header: 'Description', width: 40, type: 'text', value: (c) => c.description + (c.mileageKm ? ` (${c.mileageKm} km × RM${((c.ratePerKm ?? 0) / 100).toFixed(2)})` : '') },
+    { header: 'Amount (RM)', width: 15, type: 'money', value: (c) => rm(c.amount), total: true },
+    { header: 'Receipt', width: 10, type: 'text', value: (c) => (c.receipt ? 'Attached' : c.hasReceipt ? 'Yes' : c.category === 'Mileage' ? 'n/a' : 'Missing') },
+    { header: 'Claim Status', width: 18, type: 'text', value: (c) => CLAIM_STATUS_LABEL[c.status] },
+    { header: 'Paid Date', width: 13, type: 'date', value: (c) => c.paidDate },
+    { header: 'Paid By', width: 14, type: 'text', value: (c) => c.payMethod ?? '' },
+    { header: 'Reference', width: 18, type: 'text', value: (c) => c.paymentRef },
+    { header: 'Checks', width: 22, type: 'text', value: (c) => claimFlags(c, all).join(', ') },
+    { header: 'Remarks', width: 30, type: 'text', value: (c) => [c.status === 'rejected' && c.rejectReason ? `Rejected: ${c.rejectReason}` : '', c.remarks].filter(Boolean).join(' · ') },
+  ], sorted, { totalLabel: 'Total', filter: true });
+
+  const ws2 = wb.addWorksheet('To Pay by Staff', { views: [{ showGridLines: false }] });
+  printSetup(ws2, false, false);
+  ws2.getCell('A1').value = companyName || 'Staff Claims';
+  ws2.getCell('A1').font = { bold: true, size: 14, color: { argb: NAVY } };
+  ws2.getCell('A2').value = `Approved claims waiting for payment, as of ${formatDate(today)}`;
+  ws2.getCell('A2').font = { color: { argb: 'FF64748B' } };
+  type S = ReturnType<typeof summaryByStaff>[number];
+  writeTable<S>(ws2, 4, [
+    { header: 'Staff', width: 28, type: 'text', value: (s) => s.staffName },
+    { header: 'Claims', width: 10, type: 'int', value: (s) => s.count, total: true },
+    { header: 'Amount to pay (RM)', width: 20, type: 'money', value: (s) => rm(s.total), total: true },
+  ], summaryByStaff(all, 'approved'), { totalLabel: 'Total' });
   return wb;
 }
 

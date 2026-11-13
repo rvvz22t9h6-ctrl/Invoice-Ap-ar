@@ -214,3 +214,21 @@ test('payroll checklist is saved in the cloud', async ({ page }) => {
   await expect(page.getByTestId('checklist-pct')).toHaveText('18%');
   await expect(page.getByTestId('salary-status')).toContainText('Paid');
 });
+
+test('staff claims are saved in the cloud', async ({ page }) => {
+  await open(page);
+  await openNav(page, 'Staff Claims');
+  await page.getByTestId('new-claim').click();
+  await expect(page.getByTestId('receipt-area')).toBeVisible(); // 雲端模式可上傳收據
+  await page.getByTestId('claim-staff').fill('Cloud Staff');
+  await page.getByTestId('claim-amount').fill('42.00');
+  await page.getByTestId('claim-description').fill('Team lunch');
+  await page.getByTestId('save-claim').click();
+  await page.getByTestId('claims-table').locator('tbody tr').filter({ hasText: 'Cloud Staff' }).getByTestId('claim-approve').click();
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await openNav(page, 'Staff Claims');
+  await page.getByTestId('claims-tab-approved').click();
+  await expect(page.getByTestId('claims-table')).toContainText('Cloud Staff');
+  await expect(page.getByTestId('claims-kpi-pay-value')).toHaveText('RM 42.00');
+});

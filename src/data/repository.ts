@@ -14,6 +14,7 @@ import type { InvoiceFormValues, PaymentFormValues } from '@/domain/validation';
 import type { Task, TaskInput, TaskStatus } from '@/domain/tasks';
 import type { RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
+import type { StaffClaim } from '@/domain/claims';
 
 /** 週期規則可由使用者設定的欄位。 */
 export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
@@ -79,6 +80,12 @@ export interface Repository {
   listChecklists(): Promise<Checklist[]>;
   /** 儲存（新增或覆寫）一份月份清單。 */
   saveChecklist(checklist: Checklist): Promise<Checklist>;
+
+  // ---------- 員工報銷 ----------
+  listClaims(): Promise<StaffClaim[]>;
+  /** 新增或覆寫多筆報銷（批次核准／付款一次寫入）。 */
+  saveClaims(claims: StaffClaim[]): Promise<void>;
+  deleteClaim(id: string): Promise<void>;
 
   // ---------- 附件（僅雲端模式提供檔案儲存）----------
   /** 將已上傳的附件記錄到發票上。 */

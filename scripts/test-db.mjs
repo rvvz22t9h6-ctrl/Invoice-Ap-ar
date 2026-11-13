@@ -273,3 +273,22 @@ test('checklists: one per kind and month; invoice remarks', async () => {
   const { rows: [r] } = await as('finance', `update invoices set remarks = 'Promised Friday' where id = $1 returning remarks`, [inv.id]);
   assert.equal(r.remarks, 'Promised Friday');
 });
+
+test('staff claims: status rules, mileage, unique numbers and row-level security', async () => {
+  const ins = (id, no, extra = '') => `insert into staff_claims (id, claim_no, staff_name, expense_date, category, description, amount_sen${extra ? ', ' + extra.split('=')[0] : ''})
+    values ('${id}', '${no}', 'Ali', current_date, 'Petrol', 'Fuel', 5000${extra ? ', ' + extra.split('=')[1] : ''})`;
+  await asCommit('finance', ins('c1', 'CL-2611-001'));
+  await assert.rejects(as('finance', ins('c2', 'CL-2611-001')), /staff_claims_claim_no_key/);
+  await assert.rejects(as('finance', ins('c3', 'BAD-1')), /staff_claims_claim_no_check/);
+  await assert.rejects(as('finance', `update staff_claims set status = 'paid' where id = 'c1'`), /staff_claims_paid_details/);
+  await assert.rejects(as('finance', `update staff_claims set status = 'rejected' where id = 'c1'`), /staff_claims_reject_reason/);
+  const { rows: [p] } = await as('finance', `update staff_claims set status = 'paid', paid_date = current_date, pay_method = 'With salary' where id = 'c1' returning status, submitted_on`);
+  assert.equal(p.status, 'paid');
+  assert.ok(p.submitted_on);
+  await assert.rejects(as('finance', `insert into staff_claims (id, claim_no, staff_name, expense_date, category, description, amount_sen) values ('m1', 'CL-2611-002', 'Ali', current_date, 'Mileage', 'Trip', 2400)`), /staff_claims_mileage/);
+  await as('finance', `insert into staff_claims (id, claim_no, staff_name, expense_date, category, description, amount_sen, mileage_km, rate_per_km_sen) values ('m2', 'CL-2611-003', 'Ali', current_date, 'Mileage', 'Trip', 2400, 40, 60)`);
+  await assert.rejects(as('finance', ins('c4', 'CL-2611-004').replace('5000', '0')), /staff_claims_amount_sen_check/);
+  await assert.rejects(as('viewer', ins('c5', 'CL-2611-005')), /row-level security/);
+  const { rows } = await as('viewer', `select id from staff_claims`);
+  assert.deepEqual(rows.map((r) => r.id), ['c1']);
+});

@@ -17,6 +17,27 @@ import { formatDate, formatDateTime } from '@/domain/dates';
 import { can } from '@/domain/permissions';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useToday } from '@/hooks/useTasks';
+import { Link } from 'react-router-dom';
+import { claimTotals, summaryByStaff } from '@/domain/claims';
+import { formatMYR } from '@/domain/money';
+import { useClaims } from '@/features/claims/ClaimsPage';
+
+/** 薪資頁：提醒有已核准的員工報銷可隨薪資發放。 */
+function ClaimsForPayroll() {
+  const { claims } = useClaims();
+  const today = useToday();
+  const t = claimTotals(claims, today);
+  if (!t.toPay.count && !t.toApprove.count) return null;
+  const staff = summaryByStaff(claims, 'approved').length;
+  return (
+    <Link to="/claims" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-navy-100 bg-navy-50/60 px-4 py-3 text-sm hover:bg-navy-50" data-testid="payroll-claims">
+      <span><strong className="font-semibold text-navy-900">Staff claims:</strong>{' '}
+        {t.toPay.count > 0 && <>{formatMYR(t.toPay.total)} approved for {staff} staff, ready to pay with salary. </>}
+        {t.toApprove.count > 0 && <span className="text-slate-600">{t.toApprove.count} still waiting for approval.</span>}</span>
+      <span className="font-medium text-navy-700">Open Staff Claims →</span>
+    </Link>
+  );
+}
 
 export const checklistKey = ['checklists'] as const;
 
@@ -91,6 +112,7 @@ export function ChecklistPage({ kind }: { kind: ChecklistKind }) {
   return (
     <>
       <PageHeader eyebrow={T.eyebrow} title={T.title} subtitle={T.subtitle} />
+      {kind === 'payroll' && <ClaimsForPayroll />}
 
       <Card padded={false}>
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-4">

@@ -30,7 +30,7 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
 
 /** 類別顏色：與狀態色分開，只用來辨識類別（並附文字）。 */
 export const CATEGORY_DOT: Record<TaskCategory, string> = {
-  AP: 'bg-[#eb6834]', AR: 'bg-[#2a78d6]', GL: 'bg-[#6250d6]', Payroll: 'bg-[#1baf7a]', Banking: 'bg-[#0f1f3d]', Administration: 'bg-slate-400', 'Month-End Closing': 'bg-[#e87ba4]',
+  AP: 'bg-[#eb6834]', AR: 'bg-[#1d8a80]', GL: 'bg-[#6250d6]', Payroll: 'bg-[#1baf7a]', Banking: 'bg-[#4a2318]', Administration: 'bg-slate-400', 'Month-End Closing': 'bg-[#e87ba4]',
 };
 export function CategoryChip({ category }: { category: TaskCategory }) {
   return (

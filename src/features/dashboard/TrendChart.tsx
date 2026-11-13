@@ -12,7 +12,7 @@ import type { MonthlyTrendPoint } from '@/domain/dashboard';
 import { formatMYR, formatMYRCompact } from '@/domain/money';
 import { Card, cx } from '@/components/ui';
 
-const AR_COLOR = '#2a78d6';
+const AR_COLOR = '#1d8a80';
 const AP_COLOR = '#eb6834';
 
 type Mode = 'invoiced' | 'cash';
@@ -67,7 +67,7 @@ export function TrendChart({ data }: { data: MonthlyTrendPoint[] }) {
               <CartesianGrid vertical={false} stroke="#eef0f3" />
               <XAxis dataKey="month" tickLine={false} axisLine={{ stroke: '#d5d9e0' }} tick={{ fontSize: 12, fill: '#64748b' }} interval="preserveStartEnd" />
               <YAxis tickFormatter={formatMYRCompact} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748b' }} width={78} />
-              <Tooltip content={(props) => <TrendTooltip {...props} arLabel={arLabel} apLabel={apLabel} />} cursor={{ fill: 'rgba(15,31,61,0.05)' }} />
+              <Tooltip content={(props) => <TrendTooltip {...props} arLabel={arLabel} apLabel={apLabel} />} cursor={{ fill: 'rgba(74,35,24,0.05)' }} />
               <Legend verticalAlign="top" align="right" iconType="circle" iconSize={8} height={28}
                 formatter={(value) => <span className="text-xs text-slate-600">{value === 'AR' ? arLabel : apLabel}</span>} />
               <Bar dataKey="AR" fill={AR_COLOR} radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={400} />

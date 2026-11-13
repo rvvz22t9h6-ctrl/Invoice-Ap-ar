@@ -17,7 +17,7 @@ export { cx };
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
-  primary: 'bg-navy-800 text-white hover:bg-navy-700 shadow-sm disabled:bg-navy-300',
+  primary: 'bg-gradient-to-b from-navy-500 to-navy-700 text-white hover:from-navy-600 hover:to-navy-800 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_6px_14px_-6px_rgba(156,74,38,0.6)] disabled:from-navy-300 disabled:to-navy-300 disabled:shadow-none',
   secondary: 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 shadow-sm',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   danger: 'bg-white text-red-700 ring-1 ring-inset ring-red-200 hover:bg-red-50',
@@ -61,7 +61,7 @@ export function Card({ children, className, title, action, padded = true }: {
   children: ReactNode; className?: string; title?: ReactNode; action?: ReactNode; padded?: boolean;
 }) {
   return (
-    <section className={cx('rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,31,61,0.04)]', className)}>
+    <section className={cx('warm-card rounded-2xl border border-slate-200/80 bg-white', className)}>
       {(title || action) && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
           {title && <h2 className="text-sm font-semibold text-slate-900">{title}</h2>}
@@ -78,7 +78,7 @@ export function PageHeader({ title, subtitle, actions, eyebrow }: { title: strin
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-navy-500">{eyebrow}</p>}
-        <h1 className="font-display text-[1.65rem] leading-tight font-semibold tracking-tight text-balance text-slate-900">{title}</h1>
+        <h1 className="font-display text-[2rem] leading-tight font-semibold tracking-tight text-balance text-navy-950">{title}</h1>
         {subtitle && <p className="mt-1 max-w-2xl text-sm text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -101,7 +101,7 @@ const ICON_PATH: Record<StatIcon, string> = {
 };
 
 const ACCENT_CHIP: Record<StatAccent, string> = {
-  ar: 'bg-[#e8f1fb] text-series-ar', ap: 'bg-[#fdeee7] text-series-ap', red: 'bg-red-50 text-red-600', navy: 'bg-navy-50 text-navy-700',
+  ar: 'bg-[#e6f5f2] text-series-ar', ap: 'bg-[#fdeee7] text-series-ap', red: 'bg-red-50 text-red-600', navy: 'bg-navy-50 text-navy-700',
   slate: 'bg-slate-100 text-slate-600', green: 'bg-emerald-50 text-emerald-700', amber: 'bg-amber-50 text-amber-700',
 };
 
@@ -110,7 +110,7 @@ export function StatCard({ label, value, hint, accent = 'slate', icon, testId }:
   label: string; value: ReactNode; hint?: ReactNode; accent?: StatAccent; icon?: StatIcon; testId?: string;
 }) {
   return (
-    <div className="group rounded-xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,31,61,0.04)] transition-shadow hover:shadow-[0_4px_16px_rgba(15,31,61,0.06)]" data-testid={testId}>
+    <div className="group warm-card warm-card-hover relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-4 transition-shadow before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-navy-300 before:via-navy-500 before:to-amber-400 before:opacity-70" data-testid={testId}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</p>
         {icon && (

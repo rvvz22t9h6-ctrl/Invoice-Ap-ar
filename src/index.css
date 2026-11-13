@@ -1,34 +1,83 @@
 /*
  * 全域樣式：Tailwind v4 + 設計代號（design tokens）
- * 色彩：白色背景、海軍藍導覽列；AR 藍、AP 橘（已通過色盲辨識度驗證）。
+ * 暖色主題：奶油色背景、可可／赤陶色導覽列與按鈕、金色點綴；AR 青綠、AP 橘。
+ * 注意：色票名稱沿用 navy／slate（程式中大量使用），這裡只改變實際顏色。
  */
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* 標題與大數字：Plus Jakarta Sans（無法載入時退回系統字型） */
-  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  /* 標題與大數字：Fraunces（襯線，溫暖有質感；無法載入時退回系統襯線字型） */
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, ui-serif, serif;
 
-  /* 品牌海軍藍（導覽列與主要按鈕） */
-  --color-navy-50: #f1f4fa;
-  --color-navy-100: #dfe6f3;
-  --color-navy-200: #bccbe6;
-  --color-navy-300: #8ea6d2;
-  --color-navy-500: #3d5f9e;
-  --color-navy-600: #2c4a85;
-  --color-navy-700: #1f3a6d;
-  --color-navy-800: #162b54;
-  --color-navy-900: #0f1f3d;
-  --color-navy-950: #0a1530;
+  /* 品牌色（名稱沿用 navy）：赤陶 → 可可 */
+  --color-navy-50: #fcf4ec;
+  --color-navy-100: #f8e6d6;
+  --color-navy-200: #f0d0b6;
+  --color-navy-300: #e3ae87;
+  --color-navy-400: #d08a5c;
+  --color-navy-500: #b4572b;
+  --color-navy-600: #9c4a26;
+  --color-navy-700: #833d22;
+  --color-navy-800: #6a3120;
+  --color-navy-900: #4a2318;
+  --color-navy-950: #2f150e;
 
-  /* 資料系列顏色：AR 與 AP */
-  --color-series-ar: #2a78d6;
+  /* 中性色（名稱沿用 slate）：改為偏暖的灰褐色 */
+  --color-slate-50: #faf7f2;
+  --color-slate-100: #f4efe7;
+  --color-slate-200: #e8dfd3;
+  --color-slate-300: #d8ccbc;
+  --color-slate-400: #a99c8c;
+  --color-slate-500: #7a6e61;
+  --color-slate-600: #5c5147;
+  --color-slate-700: #463c34;
+  --color-slate-800: #2e2621;
+  --color-slate-900: #1f1915;
+  --color-slate-950: #120e0b;
+
+  /* 「進行中／已核准」標籤（名稱沿用 sky）：青綠，與暖色互補 */
+  --color-sky-50: #edf8f5;
+  --color-sky-200: #a9ddd2;
+  --color-sky-800: #14615a;
+
+  /* 資料系列顏色：AR 青綠、AP 橘 */
+  --color-series-ar: #1d8a80;
   --color-series-ap: #eb6834;
 }
 
 @layer base {
-  html { -webkit-font-smoothing: antialiased; }
-  body { @apply bg-white text-slate-900; font-feature-settings: "cv11", "ss01"; }
+  html { -webkit-font-smoothing: antialiased; background: #fbf5ec; }
+  body {
+    @apply text-slate-900;
+    font-feature-settings: "cv11", "ss01";
+    /* 奶油色底，加上淡淡的暖色光暈 */
+    background:
+      radial-gradient(60rem 30rem at 100% -10%, rgba(240, 170, 100, 0.16), transparent 60%),
+      radial-gradient(50rem 28rem at 0% 110%, rgba(214, 120, 80, 0.10), transparent 60%),
+      #fbf5ec;
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
   /* 金額欄位使用等寬數字，方便上下對齊比較 */
-  .tabular { font-variant-numeric: tabular-nums; }
+  .tabular { font-variant-numeric: tabular-nums lining-nums; }
+  .font-display { font-variant-numeric: lining-nums; font-optical-sizing: auto; }
+  ::selection { background: #f0d0b6; color: #2f150e; }
+}
+
+@layer components {
+  /* 側邊欄與手機頂欄：可可色漸層 + 左上角琥珀光暈 */
+  .warm-panel {
+    background:
+      radial-gradient(130% 55% at 0% 0%, rgba(240, 160, 90, 0.30), transparent 62%),
+      radial-gradient(90% 40% at 100% 100%, rgba(200, 80, 60, 0.22), transparent 60%),
+      linear-gradient(180deg, #55271a 0%, #3a1a12 55%, #2a120c 100%);
+  }
+  /* 卡片：柔和的暖色陰影 */
+  .warm-card {
+    box-shadow: 0 1px 2px rgba(74, 35, 24, 0.05), 0 8px 24px -12px rgba(74, 35, 24, 0.12);
+  }
+  .warm-card-hover:hover {
+    box-shadow: 0 2px 4px rgba(74, 35, 24, 0.06), 0 14px 32px -12px rgba(156, 74, 38, 0.22);
+  }
 }

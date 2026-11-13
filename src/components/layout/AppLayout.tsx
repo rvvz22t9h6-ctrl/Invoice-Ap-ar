@@ -66,7 +66,7 @@ export function AppLayout() {
   const navLink = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} end={n.end}
       className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        isActive ? 'bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#5b9be6]' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
+        isActive ? 'bg-gradient-to-r from-white/[0.16] to-white/[0.04] text-white shadow-[0_1px_0_rgba(255,255,255,0.08)_inset] before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-amber-300' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
       {n.icon}<span className="flex-1">{n.label}</span>
       {n.to === '/' && attention > 0 && <span aria-hidden title={`${attention} tasks need attention`} className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white" data-testid="nav-task-badge">{attention}</span>}
     </NavLink>
@@ -78,7 +78,7 @@ export function AppLayout() {
 
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-navy-900 text-navy-100">
+    <div className="warm-panel flex h-full flex-col text-navy-100">
       <div className="flex items-center gap-3 px-5 pt-6 pb-5">
         <img src={logoUrl} alt="" className="size-10 rounded-xl ring-1 ring-white/10" />
         <div className="min-w-0 leading-tight">
@@ -125,12 +125,12 @@ export function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-white lg:pl-64">
+    <div className="min-h-screen lg:pl-64">
       {/* 桌面版側邊欄 */}
       <aside className="fixed inset-y-0 left-0 hidden w-64 lg:block">{sidebar}</aside>
 
       {/* 手機版頂部列 */}
-      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center gap-3 bg-navy-900 px-4 py-3 text-white lg:hidden">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center gap-3 warm-panel px-4 py-3 text-white lg:hidden">
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>

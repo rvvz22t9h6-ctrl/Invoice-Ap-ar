@@ -18,9 +18,9 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { useInvoices, useSettings, useSettingsMutation } from '@/hooks/useFinanceData';
 import { buildCashFlowWorkbook } from '@/lib/excelExport';
 
-const AR = '#2a78d6';
+const AR = '#1d8a80';
 const AP = '#eb6834';
-const BAL = '#0f1f3d';
+const BAL = '#4a2318';
 
 export function CashFlowPage() {
   const { invoices, today, isLoading } = useInvoices();
@@ -71,7 +71,7 @@ export function CashFlowPage() {
               <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d5d9e0' }} tick={{ fontSize: 11, fill: '#64748b' }} interval="preserveStartEnd" />
               <YAxis tickFormatter={formatMYRCompact} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748b' }} width={80} />
               <ReferenceLine y={0} stroke="#94a3b8" />
-              <Tooltip formatter={(v, name) => [formatMYR(Math.abs(Number(v ?? 0))), String(name)]} cursor={{ fill: 'rgba(15,31,61,0.05)' }}
+              <Tooltip formatter={(v, name) => [formatMYR(Math.abs(Number(v ?? 0))), String(name)]} cursor={{ fill: 'rgba(74,35,24,0.05)' }}
                 contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
               <Legend verticalAlign="top" align="right" iconType="circle" iconSize={8} height={28} wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="inflow" name="Expected receipts" fill={AR} radius={[4, 4, 0, 0]} maxBarSize={18} animationDuration={400} />

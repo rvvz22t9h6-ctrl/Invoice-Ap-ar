@@ -33,9 +33,9 @@ export function ProductivityPage() {
               <CartesianGrid vertical={false} stroke="#eef0f3" />
               <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#d5d9e0' }} tick={{ fontSize: 11, fill: '#64748b' }} interval="preserveStartEnd" />
               <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
-              <Tooltip cursor={{ fill: 'rgba(15,31,61,0.05)' }} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
+              <Tooltip cursor={{ fill: 'rgba(74,35,24,0.05)' }} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
               <Legend verticalAlign="top" align="right" iconType="circle" iconSize={8} height={28} wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Due" fill="#9fb3d1" radius={[4, 4, 0, 0]} maxBarSize={16} animationDuration={400} />
+              <Bar dataKey="Due" fill="#e3ae87" radius={[4, 4, 0, 0]} maxBarSize={16} animationDuration={400} />
               <Bar dataKey="Completed" fill="#1e7b4f" radius={[4, 4, 0, 0]} maxBarSize={16} animationDuration={400} />
             </BarChart>
           </ResponsiveContainer>

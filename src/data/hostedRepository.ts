@@ -78,7 +78,7 @@ export function shardByMonth<T extends { id: string }>(items: T[], dateOf: (item
 }
 
 /** 自動備份的一筆紀錄（檔案存在平台 assets，這裡只記錄指標與摘要）。 */
-export type BackupReason = 'weekly' | 'manual' | 'before-delete' | 'before-restore' | 'before-sample';
+export type BackupReason = 'weekly' | 'manual' | 'before-delete' | 'before-restore' | 'before-sample' | 'before-cleanup';
 export interface BackupEntry { id: string; at: string; reason: BackupReason; invoices: number; tasks: number; claims: number; sizeBytes: number }
 /** 備份檔的儲存空間（平台 assets）。 */
 export interface BackupStore {
@@ -177,12 +177,12 @@ export class HostedRepository extends DemoRepository {
     }
     const counterparties = ((cps.data() as { items?: Counterparty[] } | undefined)?.items) ?? [];
     const activity = ((act.data() as { items?: ActivityEntry[] } | undefined)?.items) ?? [];
-    const meta = info.data() as { isSample?: boolean; modifiedAt?: string | null } | undefined;
+    const meta = info.data() as { isSample?: boolean; modifiedAt?: string | null; cleanup?: DemoState['cleanup'] } | undefined;
     if (cps.exists) this.written.set('meta/counterparties', JSON.stringify({ items: counterparties }));
     if (act.exists) this.written.set('meta/activity', JSON.stringify({ items: activity }));
-    if (info.exists) this.written.set('meta/info', JSON.stringify({ isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null }));
+    if (info.exists) this.written.set('meta/info', JSON.stringify(meta));
     // 雲端是空的 → 從空白開始（不自動放入範例資料）
-    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined, tasks, recurrences, checklists, claims };
+    this.state = { version: STATE_VERSION, counterparties, invoices, activity, isSample: meta?.isSample ?? false, modifiedAt: meta?.modifiedAt ?? null, settings: settings ? { ...DEFAULT_SETTINGS, ...settings } : undefined, tasks, recurrences, checklists, claims, cleanup: meta?.cleanup };
   }
 
   // ---------- 儲存 ----------
@@ -214,7 +214,7 @@ export class HostedRepository extends DemoRepository {
     for (const [key, items] of shardByMonth(this.state.checklists ?? [], (c) => `${c.month}-01`)) desired.set(`checklists/${key}`, JSON.stringify({ items }));
     for (const [key, items] of shardByMonth(this.state.claims ?? [], (c) => c.expenseDate)) desired.set(`claims/${key}`, JSON.stringify({ items }));
     if (this.state.recurrences?.length || this.written.has('meta/recurrences')) desired.set('meta/recurrences', JSON.stringify({ items: this.state.recurrences ?? [] }));
-    desired.set('meta/info', JSON.stringify({ isSample: this.state.isSample !== false, modifiedAt: this.state.modifiedAt ?? null }));
+    desired.set('meta/info', JSON.stringify({ isSample: this.state.isSample !== false, modifiedAt: this.state.modifiedAt ?? null, ...(this.state.cleanup ? { cleanup: this.state.cleanup } : {}) }));
     try {
       for (const [path, json] of desired) {
         if (this.written.get(path) === json) continue;
@@ -313,6 +313,22 @@ export class HostedRepository extends DemoRepository {
   override async resetDemoData() {
     if (this.ready) await this.safety('before-sample');
     await super.resetDemoData();
+  }
+
+  /** 清除舊紀錄：先備份，再刪除紀錄與其附件檔案。 */
+  override async cleanupOldData() {
+    this.require('admin');
+    if (this.previewCleanup().total === 0) return this.previewCleanup();
+    await this.safety('before-cleanup');
+    const plan = await super.cleanupOldData();
+    for (const id of plan.attachmentIds) await this.backupStore?.delete(id).catch(() => undefined);
+    return plan;
+  }
+
+  /** 已開啟自動清除時，在開啟頁面時執行（範例資料不處理）。 */
+  async maybeAutoCleanup(): Promise<number> {
+    if (this.user?.role !== 'admin' || !this.cleanupStatus().auto || this.state.isSample !== false) return 0;
+    return (await this.cleanupOldData()).total;
   }
 
   override async importBackup(text: string) {

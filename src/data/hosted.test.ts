@@ -230,6 +230,60 @@ describe('HostedRepository automatic backups', () => {
   });
 });
 
+describe('Clean-up of finished records older than 3 months', () => {
+  const old = '2026-01-10';
+  const oldForm = (n: string) => invoiceFormSchema.parse({ invoiceNumber: n, counterpartyName: 'Old Customer Sdn Bhd', invoiceDate: old, dueDate: old, description: '', invoiceAmount: '100', taxAmount: '0' });
+
+  it('removes old paid invoices and done tasks with their files, keeps unpaid ones, and backs up first', async () => {
+    const { db } = fakeDb();
+    const { store, files } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    const paid = await repo.createInvoice('AR', oldForm('OLD-PAID'));
+    await repo.recordPayment(paid.id, paymentFormSchema(today).parse({ paymentDate: old, amount: '100', method: 'FPX' }));
+    await repo.addAttachment!(paid.id, { id: 'file-1', name: 'a.pdf', contentType: 'application/pdf', sizeBytes: 1, uploadedAt: old });
+    files.set('file-1', 'pdf');
+    await repo.createInvoice('AR', oldForm('OLD-UNPAID')); // 很舊但還沒收款 → 保留
+    const recent = await repo.createInvoice('AR', form('NEW-PAID'));
+    await repo.recordPayment(recent.id, paymentFormSchema(today).parse({ paymentDate: today, amount: '1000', method: 'FPX' }));
+    const t = await repo.saveTask({ title: 'Old done', category: 'GL', priority: 'Low', dueDate: old });
+    await repo.setTaskStatus(t.id, 'done');
+    await repo.saveTask({ title: 'Old open', category: 'GL', priority: 'Low', dueDate: old });
+
+    const preview = repo.previewCleanup();
+    expect(preview).toMatchObject({ invoiceIds: [paid.id], attachmentIds: ['file-1'] });
+    expect(await repo.maybeAutoCleanup()).toBe(0); // 尚未開啟自動清除
+    const plan = await repo.cleanupOldData();
+    expect(plan.invoiceIds).toEqual([paid.id]);
+    expect((await repo.listInvoices()).map((i) => i.invoiceNumber).sort()).toEqual(['NEW-PAID', 'OLD-UNPAID']);
+    expect((await repo.listTasks()).map((x) => x.title)).toContain('Old open');
+    expect(files.has('file-1')).toBe(false);
+    const [b] = await repo.listBackups();
+    expect(b).toMatchObject({ reason: 'before-cleanup', invoices: 3 });
+    expect(repo.cleanupStatus().lastCount).toBe(plan.total);
+    expect((await repo.cleanupOldData()).total).toBe(0);
+  });
+
+  it('automatic clean-up runs on open only after it is switched on, and the setting survives a reload', async () => {
+    const { db } = fakeDb();
+    const { store } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    const paid = await repo.createInvoice('AP', oldForm('AP-OLD'));
+    await repo.setApproval(paid.id, 'approved');
+    await repo.recordPayment(paid.id, paymentFormSchema(today).parse({ paymentDate: old, amount: '100', method: 'FPX' }));
+    await repo.setAutoCleanup(true);
+    await repo.whenSaved();
+    const again = await HostedRepository.create(db, owner);
+    again.setBackupStore(store);
+    expect(again.cleanupStatus().auto).toBe(true);
+    expect(await again.maybeAutoCleanup()).toBe(1);
+    expect(await again.listInvoices()).toHaveLength(0);
+    const v = await HostedRepository.create(db, viewer);
+    expect(await v.maybeAutoCleanup()).toBe(0);
+  });
+});
+
 describe('shardInvoices', () => {
   it('groups by month and splits large months under the size limit', () => {
     const state = buildInitialDemoState('2026-11-12');

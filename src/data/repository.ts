@@ -15,6 +15,7 @@ import type { Task, TaskInput, TaskStatus } from '@/domain/tasks';
 import type { RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
+import type { CleanupPlan } from '@/domain/retention';
 
 /** 週期規則可由使用者設定的欄位。 */
 export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
@@ -102,6 +103,13 @@ export interface Repository {
   exportBackup?(): string;
   /** 由備份還原（會取代目前所有資料）。 */
   importBackup?(text: string): Promise<void>;
+  /** 可清除的舊紀錄（超過 3 個月且已結束）。 */
+  previewCleanup?(): CleanupPlan;
+  /** 清除舊紀錄；回傳清除內容。 */
+  cleanupOldData?(): Promise<CleanupPlan>;
+  /** 自動清除設定與上次清除紀錄。 */
+  cleanupStatus?(): { auto: boolean; lastAt: string | null; lastCount: number };
+  setAutoCleanup?(on: boolean): Promise<void>;
   /** 資料狀態：是否為範例、筆數、最後修改與最後備份時間。 */
   dataStatus?(): { isSample: boolean; invoiceCount: number; modifiedAt: string | null; lastBackupAt: string | null };
 }

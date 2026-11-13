@@ -14,7 +14,7 @@ import { Alert, Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { repository } from '@/data';
 import type { BackupEntry, BackupReason, HostedRepository, SaveStatus } from '@/data/hostedRepository';
-import { formatDateTime, todayIso } from '@/domain/dates';
+import { formatDate, formatDateTime, todayIso } from '@/domain/dates';
 import { downloadTextFile, isDeclined } from '@/lib/download';
 import { useInvoices } from '@/hooks/useFinanceData';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -95,12 +95,13 @@ type Pending =
   | { kind: 'clear' }
   | { kind: 'sample' }
   | { kind: 'restore'; file: File }
-  | { kind: 'auto'; entry: BackupEntry };
+  | { kind: 'auto'; entry: BackupEntry }
+  | { kind: 'cleanup' };
 
 /** 「我的資料」對話框。 */
 const REASON_LABEL: Record<BackupReason, string> = {
   weekly: 'Weekly automatic backup', manual: 'Backed up by you', 'before-delete': 'Saved before "Delete all data"',
-  'before-restore': 'Saved before a restore', 'before-sample': 'Saved before loading sample data',
+  'before-restore': 'Saved before a restore', 'before-sample': 'Saved before loading sample data', 'before-cleanup': 'Saved before a clean-up',
 };
 
 export function DataManagerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -146,6 +147,7 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
       ? { title: 'Remove the sample data?', body: 'All sample invoices are removed and the system becomes empty, ready for your real invoices.', button: 'Remove sample data' }
       : { title: 'Delete all data?', body: canAuto ? 'Every invoice, payment, task and claim will be deleted. A backup is saved automatically first, so you can restore it from "Automatic backups" if you change your mind.' : 'Every invoice, payment and history entry will be deleted. Download a backup first if you may need them.', button: 'Delete everything' },
     sample: { title: 'Load sample data?', body: 'Everything currently saved is replaced with sample invoices. Your data is lost unless you have a backup.', button: 'Replace with sample data' },
+    cleanup: { title: 'Remove old finished records?', body: 'Paid or cancelled invoices, completed tasks, paid or rejected claims and completed checklists that ended more than 3 months ago are removed, together with their attached files. Unpaid invoices and open tasks are always kept. A backup of the records is saved first; attached files cannot be brought back.', button: 'Remove old records' },
     auto: { title: 'Restore this backup?', body: `Everything currently saved is replaced with the backup from ${pending?.kind === 'auto' ? formatDateTime(pending.entry.at) : ''}. Your current data is backed up first, so you can undo this.`, button: 'Restore backup' },
     restore: { title: 'Restore this backup?', body: `Everything currently saved is replaced with the contents of "${pending?.kind === 'restore' ? pending.file.name : ''}".`, button: 'Restore backup' },
   };
@@ -154,6 +156,7 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
     if (!pending) return;
     if (pending.kind === 'clear') void run(() => repository.clearAllData!(), status.isSample ? 'Sample data removed. The system is now empty.' : 'All data deleted');
     if (pending.kind === 'sample') void run(() => repository.resetDemoData!(), 'Sample data loaded');
+    if (pending.kind === 'cleanup') void run(async () => { await repository.cleanupOldData!(); }, 'Old records removed');
     if (pending.kind === 'auto') { const id = pending.entry.id; void run(() => hostedRepo!.restoreBackup(id), 'Backup restored'); }
     if (pending.kind === 'restore') { const f = pending.file; void run(async () => repository.importBackup!(await f.text()), 'Backup restored'); }
   };
@@ -231,6 +234,29 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
               )}
             </section>
           )}
+
+          {isAdmin && !status.isSample && repository.previewCleanup && (() => {
+            const plan = repository.previewCleanup!();
+            const cs = repository.cleanupStatus!();
+            const parts = [[plan.invoiceIds.length, 'invoice'], [plan.taskIds.length, 'task'], [plan.claimIds.length, 'claim'], [plan.checklistIds.length, 'checklist']] as const;
+            const text = parts.filter(([n]) => n > 0).map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`).join(', ');
+            return (
+              <section data-testid="cleanup-section">
+                <h3 className="font-semibold text-slate-900">Storage clean-up</h3>
+                <p className="mt-1 text-slate-600">Removes finished records older than 3 months to save space: paid or cancelled invoices, completed tasks, paid or rejected claims, and their attached files. <strong className="font-medium text-slate-800">Unpaid invoices and open tasks are always kept.</strong></p>
+                <p className="mt-2 text-slate-800" data-testid="cleanup-preview">{plan.total ? <>Ready to remove now: <strong>{text}</strong>{plan.attachmentIds.length ? ` and ${plan.attachmentIds.length} attached file${plan.attachmentIds.length === 1 ? '' : 's'}` : ''} (ended before {formatDate(plan.cutoff)}).</> : 'Nothing is old enough to remove yet.'}</p>
+                {cs.lastAt && <p className="mt-1 text-xs text-slate-500">Last clean-up: {formatDateTime(cs.lastAt)} · {cs.lastCount} records removed</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button onClick={() => setPending({ kind: 'cleanup' })} disabled={!plan.total || busy} data-testid="cleanup-now">Clean up now</Button>
+                  <label className="flex items-center gap-2 text-slate-700">
+                    <input type="checkbox" className="size-4 rounded border-slate-300 accent-navy-700" checked={cs.auto} data-testid="cleanup-auto"
+                      onChange={async (e) => { try { await repository.setAutoCleanup!(e.target.checked); toast(e.target.checked ? 'Automatic clean-up is on' : 'Automatic clean-up is off'); await qc.invalidateQueries(); } catch (err) { setError(err instanceof Error ? err.message : 'Could not save'); } }} />
+                    Do this automatically when I open the portal
+                  </label>
+                </div>
+              </section>
+            );
+          })()}
 
           {isAdmin && (
             <section>

@@ -54,6 +54,8 @@ export async function initRepository(): Promise<void> {
   } : null);
   const auto = () => { void repo.maybeAutoBackup().catch(() => false); };
   void repo.listBackups().catch(() => []).then(auto);
+  // 已開啟「自動清除」：清掉超過 3 個月且已結束的紀錄（先備份）
+  await repo.maybeAutoCleanup().catch(() => 0);
   setInterval(auto, 6 * 3_600_000);
   repository = repo;
 }

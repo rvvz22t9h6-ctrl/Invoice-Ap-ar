@@ -259,6 +259,11 @@ test('automatic backup: saved before "Delete all data" and restored in two taps'
   await expect(page.getByTestId('auto-backups')).toContainText('No backups yet');
   await page.getByTestId('backup-now').click();
   await expect(page.getByTestId('backup-list')).toContainText('Backed up by you');
+  // 清除舊資料：新資料不會被清除；可開啟自動清除
+  await expect(page.getByTestId('cleanup-preview')).toHaveText('Nothing is old enough to remove yet.');
+  await expect(page.getByTestId('cleanup-now')).toBeDisabled();
+  await page.getByTestId('cleanup-auto').check();
+  await expect(page.getByText('Automatic clean-up is on')).toBeVisible();
   await page.getByTestId('start-fresh').click();
   await expect(page.getByTestId('confirm-panel')).toContainText('A backup is saved automatically first');
   await page.getByTestId('confirm-data-action').click();

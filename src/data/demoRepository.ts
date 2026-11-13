@@ -18,6 +18,7 @@ import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } f
 import { RULE_TEMPLATES } from '@/domain/taskTemplates';
 import type { Checklist } from '@/domain/checklists';
 import { isValidClaimRecord, type StaffClaim } from '@/domain/claims';
+import { planCleanup, type CleanupPlan } from '@/domain/retention';
 import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
@@ -52,6 +53,8 @@ export interface DemoState {
   checklists?: Checklist[];
   /** 員工報銷。 */
   claims?: StaffClaim[];
+  /** 舊資料清除：是否自動、上次清除時間與筆數。 */
+  cleanup?: { auto: boolean; lastAt: string | null; lastCount: number };
 }
 
 /** 備份檔格式。 */
@@ -627,6 +630,39 @@ export class DemoRepository implements Repository {
     this.state.claims = (this.state.claims ?? []).filter((c) => c.id !== id);
     this.commit();
     await this.delay(undefined);
+  }
+
+  // ---------- 舊資料清除（超過 3 個月且已結束的紀錄）----------
+
+  previewCleanup(): CleanupPlan {
+    const s = this.state;
+    return planCleanup({ invoices: s.invoices, tasks: s.tasks ?? [], claims: s.claims ?? [], checklists: s.checklists ?? [] }, this.today());
+  }
+
+  async cleanupOldData(): Promise<CleanupPlan> {
+    this.require('admin');
+    const plan = this.previewCleanup();
+    if (plan.total === 0) return plan;
+    const gone = { inv: new Set(plan.invoiceIds), task: new Set(plan.taskIds), claim: new Set(plan.claimIds), list: new Set(plan.checklistIds) };
+    const s = this.state;
+    s.invoices = s.invoices.filter((i) => !gone.inv.has(i.id));
+    s.activity = s.activity.filter((a) => !a.invoiceId || !gone.inv.has(a.invoiceId));
+    s.tasks = (s.tasks ?? []).filter((t) => !gone.task.has(t.id));
+    s.claims = (s.claims ?? []).filter((c) => !gone.claim.has(c.id));
+    s.checklists = (s.checklists ?? []).filter((c) => !gone.list.has(c.id));
+    s.cleanup = { auto: s.cleanup?.auto ?? false, lastAt: new Date().toISOString(), lastCount: plan.total };
+    this.commit();
+    return plan;
+  }
+
+  cleanupStatus() {
+    return this.state.cleanup ?? { auto: false, lastAt: null, lastCount: 0 };
+  }
+
+  async setAutoCleanup(on: boolean) {
+    this.require('admin');
+    this.state.cleanup = { ...this.cleanupStatus(), auto: on };
+    this.commit();
   }
 
   async resetDemoData() {

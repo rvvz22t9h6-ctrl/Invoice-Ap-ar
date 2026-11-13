@@ -86,3 +86,12 @@ test('the boss (read-only) gets the tabs but no + button', async ({ page }) => {
   await expect(page.getByTestId('tab-claims')).toBeVisible();
   await expect(page.getByTestId('quick-record')).toHaveCount(0);
 });
+
+test('search on a phone', async ({ page }) => {
+  await login(page, 'admin');
+  await page.getByTestId('search-open-mobile').click();
+  await page.getByTestId('search-input').fill('siti hajar');
+  await page.getByTestId('search-hit').first().click();
+  await expect(page.getByRole('heading', { name: 'Staff Claims' })).toBeVisible();
+  await expect(page.getByTestId('claim-card').first()).toContainText('Siti Hajar');
+});

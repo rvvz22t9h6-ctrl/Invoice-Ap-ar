@@ -6,6 +6,7 @@
  * - 催款信：對有逾期帳款的客戶，一鍵產生可複製的提醒信內容。
  */
 import { useMemo, useState } from 'react';
+import { useOpenRequest } from '@/lib/quickRecord';
 import { Alert, Button, Card, cx, FilterSelect, Modal, PageHeader, Spinner, TextArea, TextInput } from '@/components/ui';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
@@ -35,6 +36,8 @@ export function ContactsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const { invoices, isLoading } = useInvoices();
   const parties = useCounterparties();
+  // 從搜尋開啟：切到對應的類別並開啟該對象
+  useOpenRequest('contact', (id) => { const c = (parties.data ?? []).find((x) => x.id === id); if (c) { setKind(c.kind); setShow('all'); setQ(''); setOpenId(id); } }, parties.isSuccess);
   const type: InvoiceType = kind === 'customer' ? 'AR' : 'AP';
 
   const rows = useMemo<Row[]>(() => (parties.data ?? []).filter((c) => c.kind === kind).map((c) => {

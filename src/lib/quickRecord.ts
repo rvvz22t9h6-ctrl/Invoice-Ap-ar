@@ -27,3 +27,29 @@ export function useQuickNew(kind: QuickKind, open: () => void) {
     return () => { listeners.delete(check); };
   }, [kind]);
 }
+
+// ---------------------------------------------------------------------------
+// 從全域搜尋開啟某一筆紀錄：切換到對應頁面後，由該頁面開啟明細
+// ---------------------------------------------------------------------------
+
+export type OpenKind = 'ap' | 'ar' | 'claim' | 'task' | 'note' | 'contact';
+let pendingOpen: { kind: OpenKind; id: string } | null = null;
+const openListeners = new Set<() => void>();
+
+export function requestOpen(kind: OpenKind, id: string) {
+  pendingOpen = { kind, id };
+  openListeners.forEach((fn) => fn());
+}
+
+/** 頁面呼叫：有對應的開啟請求時執行 open(id)（只執行一次）。ready=false 時先等資料載入。 */
+export function useOpenRequest(kind: OpenKind, open: (id: string) => void, ready = true) {
+  const ref = useRef(open);
+  ref.current = open;
+  useEffect(() => {
+    if (!ready) return undefined;
+    const check = () => { if (pendingOpen?.kind === kind) { const { id } = pendingOpen; pendingOpen = null; ref.current(id); } };
+    check();
+    openListeners.add(check);
+    return () => { openListeners.delete(check); };
+  }, [kind, ready]);
+}

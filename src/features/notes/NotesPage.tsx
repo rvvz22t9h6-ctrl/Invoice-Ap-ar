@@ -10,7 +10,7 @@ import { repository } from '@/data';
 import { formatDate, todayIso } from '@/domain/dates';
 import { filterNotes, NOTE_BODY_MAX, NOTE_CATEGORIES, NOTE_TITLE_MAX, notesToText, validateNote, type Note, type NoteCategory, type NoteErrors } from '@/domain/notes';
 import { downloadTextFile, isDeclined } from '@/lib/download';
-import { useQuickNew } from '@/lib/quickRecord';
+import { useOpenRequest, useQuickNew } from '@/lib/quickRecord';
 
 const notesKey = ['notes'] as const;
 
@@ -38,6 +38,7 @@ export function NotesPage() {
   const [editing, setEditing] = useState<Note | null>(null);
   const [creating, setCreating] = useState(false);
   useQuickNew('note', () => { if (available) setCreating(true); });
+  useOpenRequest('note', (id) => { const n = notes.find((x) => x.id === id); if (n) setEditing(n); }, q.isSuccess);
 
   const save = useMutation({
     mutationFn: (n: Note) => repository.saveNote(n),

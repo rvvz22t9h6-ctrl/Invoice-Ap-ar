@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { repository } from '@/data';
 import { requestNew, type QuickKind } from '@/lib/quickRecord';
+import { GlobalSearch, SearchButton } from '@/features/search/GlobalSearch';
 import { DataBanners, DataManagerModal, downloadBackup, isHosted, isLocalMode, useSaveStatus } from '@/features/data/DataManager';
 import { ROLE_LABEL } from '@/domain/types';
 import logoUrl from '@/assets/logo.svg';
@@ -76,6 +77,19 @@ export function AppLayout() {
   );
   const company = settings.companyName || 'Finance Portal';
 
+  // 全域搜尋：Ctrl/⌘+K 或「/」開啟（正在輸入文字時不攔截「/」）
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if ((e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)) { e.preventDefault(); setSearching(true); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+  const searchPages = [...MAIN_NAV, ...MORE_NAV].filter((n) => n.to !== '/notes' || repository.notesAvailable()).map((n) => ({ to: n.to, label: n.label }));
+
   // 切換頁面時自動關閉手機選單
   useEffect(() => setOpen(false), [location.pathname]);
 
@@ -138,6 +152,7 @@ export function AppLayout() {
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>
         <p className="font-display min-w-0 flex-1 truncate text-sm font-semibold">{company}</p>
+        <SearchButton compact onClick={() => setSearching(true)} />
         <ReminderBell dark />
       </header>
       {open && (
@@ -150,13 +165,14 @@ export function AppLayout() {
       <main className="mx-auto max-w-[1400px] px-4 pt-6 pb-28 sm:px-6 lg:px-8 lg:py-8">
         <div className="mb-3 hidden items-center justify-between gap-3 lg:flex">
           <p className="text-xs font-medium text-slate-400">{new Date(`${today}T00:00:00Z`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })} · Malaysia time</p>
-          <ReminderBell />
+          <div className="flex flex-1 items-center justify-end gap-3"><SearchButton onClick={() => setSearching(true)} /><ReminderBell /></div>
         </div>
         <DailySummaryBanner />
         <DataBanners onManage={() => setDataOpen(true)} />
         <Outlet />
         <DataManagerModal open={dataOpen} onClose={() => setDataOpen(false)} />
       </main>
+      {searching && <GlobalSearch pages={searchPages} onClose={() => setSearching(false)} />}
       <MobileBar canRecord={user?.role !== 'viewer' && !!user} />
     </div>
   );

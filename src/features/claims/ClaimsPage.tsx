@@ -24,7 +24,7 @@ import { AttachmentDrop, AttachmentList } from '@/features/invoices/AttachmentDr
 import { useToday } from '@/hooks/useTasks';
 import { AttachmentError, attachmentsEnabled, autoFillEnabled, deleteAttachmentFile, extractReceiptDetails, uploadAttachment } from '@/lib/attachments';
 import { isDeclined } from '@/lib/download';
-import { useQuickNew } from '@/lib/quickRecord';
+import { useOpenRequest, useQuickNew } from '@/lib/quickRecord';
 
 export const claimsKey = ['claims'] as const;
 
@@ -89,6 +89,8 @@ export function ClaimsPage() {
   const [exporting, setExporting] = useState(false);
   useEffect(() => setSelected(new Set()), [tab]);
   useQuickNew('claim', () => { if (canEdit) setCreating(true); });
+  // 從搜尋開啟：切到「All」並以報銷編號篩選（檢視者也適用）
+  useOpenRequest('claim', (id) => { const c = claims.find((x) => x.id === id); if (c) { setTab('all'); setMonth(''); setStaff(''); setQ(c.claimNo); } }, !isLoading);
 
   const totals = useMemo(() => claimTotals(claims, today), [claims, today]);
   const names = useMemo(() => staffNames(claims), [claims]);

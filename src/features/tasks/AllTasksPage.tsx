@@ -10,6 +10,7 @@ import { can } from '@/domain/permissions';
 import { isOpen, isTaskOverdue, PRIORITY_RANK, TASK_CATEGORIES, TASK_PRIORITIES, type Task } from '@/domain/tasks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useTasks, useToday } from '@/hooks/useTasks';
+import { useOpenRequest } from '@/lib/quickRecord';
 import { CategoryChip, dueLabel, PriorityBadge, TaskDeleteButton, TaskFormModal, TaskStatusBadge } from './TaskParts';
 
 type ViewKey = 'open' | 'overdue' | 'next30' | 'done' | 'all';
@@ -25,6 +26,7 @@ export function AllTasksPage() {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<Task | null>(null);
   const [creating, setCreating] = useState(false);
+  useOpenRequest('task', (id) => { const t = tasks.find((x) => x.id === id); if (t) { setView('all'); setOpen(t); } }, tasks.length > 0);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();

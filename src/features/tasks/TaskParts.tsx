@@ -1,7 +1,7 @@
 /**
  * 任務共用元件：優先度／類別標籤、任務列（勾選完成）、新增／編輯表單、快速新增。
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode, type SyntheticEvent } from 'react';
 import { Alert, Button, cx, Modal, SelectInput, TextArea, TextInput } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { daysBetween, formatDate, type IsoDate } from '@/domain/dates';
@@ -61,6 +61,39 @@ export function dueLabel(t: Task, today: IsoDate): { text: string; tone: 'red' |
 }
 
 // ---------------------------------------------------------------------------
+// 刪除按鈕（每列都有，兩步確認：點垃圾桶 → 「Delete? Yes / No」）
+// ---------------------------------------------------------------------------
+
+export function TaskDeleteButton({ task }: { task: Task }) {
+  const { user } = useAuth();
+  const { remove } = useTaskMutations();
+  const toast = useToast();
+  const [asking, setAsking] = useState(false);
+  if (!can(user?.role, 'invoice.edit')) return null;
+  const stop = (e: SyntheticEvent) => e.stopPropagation();
+  if (asking) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-xs" onClick={stop} data-testid="task-delete-confirm">
+        <span className="text-slate-600">Delete?</span>
+        <button type="button" disabled={remove.isPending} data-testid="task-delete-yes"
+          className="rounded-md bg-red-600 px-2 py-1 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+          onClick={async (e) => {
+            stop(e);
+            try { await remove.mutateAsync(task.id); toast(`Deleted: ${task.title}`); } catch (err) { toast(err instanceof Error ? err.message : 'Could not delete the task', 'error'); setAsking(false); }
+          }}>Yes</button>
+        <button type="button" className="rounded-md px-2 py-1 font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50" onClick={(e) => { stop(e); setAsking(false); }}>No</button>
+      </span>
+    );
+  }
+  return (
+    <button type="button" onClick={(e) => { stop(e); setAsking(true); }} aria-label={`Delete "${task.title}"`} title="Delete task" data-testid="task-delete"
+      className="grid size-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-navy-600">
+      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 任務列
 // ---------------------------------------------------------------------------
 
@@ -99,6 +132,7 @@ export function TaskItem({ task, today, onOpen, compact }: { task: Task; today: 
           {!compact && task.remarks && <span className="truncate text-slate-400">· {task.remarks}</span>}
         </span>
       </button>
+      <TaskDeleteButton task={task} />
     </li>
   );
 }

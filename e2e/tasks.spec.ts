@@ -91,12 +91,12 @@ test('recurring task: create, generated without duplicates, deleted occurrence s
   await expect(page.getByTestId('rule-list')).toContainText('Review petty cash vouchers');
 
   await openNav(page, 'All Tasks');
-  await page.getByLabel('View').selectOption('all');
+  await page.getByLabel('View', { exact: true }).selectOption('all');
   await page.getByLabel('Search tasks').fill('petty cash vouchers');
   const rows = page.getByTestId('task-table').locator('tbody tr');
   await expect(rows).toHaveCount(4); // 今天、+10、+20、+30（30 天內）
   await page.reload();
-  await page.getByLabel('View').selectOption('all');
+  await page.getByLabel('View', { exact: true }).selectOption('all');
   await page.getByLabel('Search tasks').fill('petty cash vouchers');
   await expect(rows).toHaveCount(4); // 重新整理不會重複
   await rows.nth(1).click();
@@ -104,7 +104,7 @@ test('recurring task: create, generated without duplicates, deleted occurrence s
   await page.getByTestId('confirm-delete-task').click();
   await expect(rows).toHaveCount(3);
   await page.reload();
-  await page.getByLabel('View').selectOption('all');
+  await page.getByLabel('View', { exact: true }).selectOption('all');
   await page.getByLabel('Search tasks').fill('petty cash vouchers');
   await expect(rows).toHaveCount(3); // 被刪除的日期不會再產生
 });
@@ -149,6 +149,10 @@ test('reminder centre: badge, panel, payroll reminder and desktop notifications'
     (window as unknown as { Notification: unknown }).Notification = FakeNotification;
   });
   await openMyDay(page);
+  // 自建一筆明天到期的薪資任務，避免依賴樣本資料的日期
+  await page.getByTestId('quick-add-input').fill('Pay EPF test tomorrow #payroll');
+  await page.getByTestId('quick-add-submit').click();
+  await expect(page.getByText('Added "Pay EPF test"')).toBeVisible();
   const overdue = await kpiNum(page, 'task-kpi-overdue');
   const todayOpen = await page.getByTestId('today-list').getByTestId('task-item').count();
   await expect(page.locator('[data-testid=reminder-badge]:visible')).toHaveText(String(overdue + todayOpen));
@@ -187,4 +191,30 @@ test('productivity shows rates and history', async ({ page }) => {
   await expect(page.getByTestId('prod-week-value')).toHaveText(/\d+%|—/);
   await expect(page.getByTestId('prod-table').locator('tbody tr')).toHaveCount(14);
   await expect(page.getByTestId('history-list').locator('li').first()).toBeVisible();
+});
+
+test('delete button on each task row, with a quick confirm, on Dashboard and All Tasks', async ({ page }) => {
+  await openMyDay(page);
+  await page.getByTestId('quick-add-input').fill('Throwaway task today');
+  await page.getByTestId('quick-add-submit').click();
+  const row = page.getByTestId('today-list').getByTestId('task-item').filter({ hasText: 'Throwaway task' });
+  await row.getByTestId('task-delete').click();
+  await row.getByRole('button', { name: 'No' }).click(); // 取消不會刪除
+  await expect(row).toBeVisible();
+  await row.getByTestId('task-delete').click();
+  await row.getByTestId('task-delete-yes').click();
+  await expect(page.getByText('Deleted: Throwaway task')).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0); // 不會誤開編輯視窗
+
+  await page.getByTestId('quick-add-input').fill('Second throwaway today');
+  await page.getByTestId('quick-add-submit').click();
+  await openNav(page, 'All Tasks');
+  const tr = page.getByTestId('task-table').getByRole('row').filter({ hasText: 'Second throwaway' });
+  await tr.getByTestId('task-delete').click();
+  await tr.getByTestId('task-delete-yes').click();
+  await expect(tr).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('task-table')).not.toContainText('Second throwaway');
 });

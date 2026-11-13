@@ -10,7 +10,7 @@ import { can } from '@/domain/permissions';
 import { isOpen, isTaskOverdue, PRIORITY_RANK, TASK_CATEGORIES, TASK_PRIORITIES, type Task } from '@/domain/tasks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useTasks, useToday } from '@/hooks/useTasks';
-import { CategoryChip, dueLabel, PriorityBadge, TaskFormModal, TaskStatusBadge } from './TaskParts';
+import { CategoryChip, dueLabel, PriorityBadge, TaskDeleteButton, TaskFormModal, TaskStatusBadge } from './TaskParts';
 
 type ViewKey = 'open' | 'overdue' | 'next30' | 'done' | 'all';
 
@@ -43,6 +43,7 @@ export function AllTasksPage() {
     { key: 'due', header: 'Due', sortValue: (t) => t.dueDate, render: (t) => { const d = dueLabel(t, today); return <span className="whitespace-nowrap">{formatDate(t.dueDate)}<span className={`block text-xs ${d.tone === 'red' ? 'text-red-700' : 'text-slate-500'}`}>{isOpen(t) ? d.text.split(' · ')[0] : ''}</span></span>; } },
     { key: 'status', header: 'Status', sortValue: (t) => t.status, render: (t) => <TaskStatusBadge task={t} today={today} /> },
     { key: 'remarks', header: 'Remarks', wideOnly: true, render: (t) => <span className="block max-w-xs truncate text-xs text-slate-500">{t.remarks || '—'}</span> },
+    { key: 'actions', header: '', render: (t) => <div className="flex justify-end"><TaskDeleteButton task={t} /></div> },
   ];
 
   return (

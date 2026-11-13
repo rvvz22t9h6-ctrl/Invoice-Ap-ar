@@ -7,6 +7,7 @@
  * 注意：「已付金額」「未付餘額」「付款狀態」不儲存於資料庫，
  * 一律由 invoice.ts 中的函式根據付款紀錄即時計算。
  */
+import type { FollowUp } from './followups';
 import type { Sen } from './money';
 import type { IsoDate } from './dates';
 
@@ -120,6 +121,8 @@ export interface Invoice {
   payments: Payment[];
   /** 附件；舊資料可能沒有此欄位。 */
   attachments?: Attachment[];
+  /** 催款／付款跟進紀錄；舊資料可能沒有此欄位。 */
+  followUps?: FollowUp[];
 }
 
 /** 經計算後的發票（畫面與報表使用）。 */

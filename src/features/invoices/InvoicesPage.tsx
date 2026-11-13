@@ -28,6 +28,7 @@ import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
 import { buildInvoiceListWorkbook } from '@/lib/excelExport';
 import { ACCEPT_ATTR, attachmentsEnabled } from '@/lib/attachments';
 import { useOpenRequest, useQuickNew } from '@/lib/quickRecord';
+import { PromiseTag } from './FollowUps';
 
 /** 「未付清」= 未取消且有未付餘額（含 Pending、Partially Paid、Overdue）。 */
 const OUTSTANDING = 'Outstanding';
@@ -137,6 +138,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
         <div className="flex flex-col items-start gap-1">
           <StatusBadge status={r.status} />
           {r.isOverdue && r.isPartiallyPaid && <span className="text-[11px] text-slate-500">part paid</span>}
+          <PromiseTag invoice={r} today={today} />
           {type === 'AP' && r.approvalStatus !== 'approved' && <ApprovalBadge status={r.approvalStatus} />}
         </div>
       ),

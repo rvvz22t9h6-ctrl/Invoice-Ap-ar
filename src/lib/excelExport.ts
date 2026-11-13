@@ -18,6 +18,7 @@ import { saveFile } from './download';
 import { APPROVAL_LABEL, PAYMENT_KIND_LABEL, TYPE_LABELS, type CompanySettings, type ComputedInvoice, type Counterparty, type InvoiceType, type PaymentKind } from '@/domain/types';
 import { buildCashFlowForecast, type CashFlowForecast } from '@/domain/cashflow';
 import type { Statement } from '@/domain/statement';
+import type { WeeklySummary } from '@/domain/weeklySummary';
 import { CLAIM_STATUS_LABEL, claimFlags, summaryByStaff, type StaffClaim } from '@/domain/claims';
 
 const NAVY = 'FF0F1F3D';
@@ -381,6 +382,56 @@ export async function buildClaimsWorkbook(rows: StaffClaim[], all: StaffClaim[],
     { header: 'Claims', width: 10, type: 'int', value: (s) => s.count, total: true },
     { header: 'Amount to pay (RM)', width: 20, type: 'money', value: (s) => rm(s.total), total: true },
   ], summaryByStaff(all, 'approved'), { totalLabel: 'Total' });
+  return wb;
+}
+
+/** 每週摘要活頁簿（單一工作表，直向，可直接列印給主管）。 */
+export async function buildWeeklySummaryWorkbook(s: WeeklySummary, companyName?: string): Promise<Workbook> {
+  const wb = await newWorkbook();
+  const ws = wb.addWorksheet('Weekly Summary', { views: [{ showGridLines: false }] });
+  printSetup(ws, false, false);
+  ws.getColumn(1).width = 44; ws.getColumn(2).width = 12; ws.getColumn(3).width = 20; ws.getColumn(4).width = 24;
+  ws.getCell('A1').value = companyName || 'Weekly finance summary';
+  ws.getCell('A1').font = { bold: true, size: 16, color: { argb: NAVY } };
+  ws.getCell('A2').value = `Weekly finance summary · ${formatDate(s.from)} to ${formatDate(s.to)} · figures as of ${formatDate(s.asOf)}`;
+  ws.getCell('A2').font = { color: { argb: 'FF64748B' } };
+  let r = 4;
+  const section = (title: string, head: string[]) => { ws.getRow(r).values = [title, ...head]; styleHeader(ws, r, 4); r += 1; };
+  const line = (label: string, count: number | string | null, amount: number | null, extra = '') => {
+    const row = ws.getRow(r);
+    row.values = [label, count, amount === null ? null : rm(amount), extra];
+    row.getCell(3).numFmt = MONEY_FMT;
+    row.getCell(2).alignment = { horizontal: 'right' };
+    r += 1;
+  };
+  section('This week', ['Count', 'Amount (RM)', '']);
+  line('Collected from customers', s.collected.count, s.collected.total);
+  line('Paid to suppliers', s.paid.count, s.paid.total);
+  line('Staff claims paid', s.claimsPaid.count, s.claimsPaid.total);
+  line('New customer invoices issued', s.invoiced.count, s.invoiced.total);
+  line('New supplier bills received', s.billed.count, s.billed.total);
+  r += 1;
+  section(`Position as of ${formatDate(s.asOf)}`, ['Count', 'Amount (RM)', '']);
+  line('Customers owe us (AR outstanding)', s.arOutstanding.count, s.arOutstanding.total);
+  line('   of which overdue', s.arOverdue.count, s.arOverdue.total);
+  line('We owe suppliers (AP outstanding)', s.apOutstanding.count, s.apOutstanding.total);
+  line('   of which overdue', s.apOverdue.count, s.apOverdue.total);
+  if (s.topOverdue.length) {
+    r += 1;
+    section('Largest overdue customers', ['Invoices', 'Overdue (RM)', 'Oldest']);
+    s.topOverdue.forEach((c) => line(c.name, c.count, c.total, `${c.oldestDays} days overdue`));
+  }
+  if (s.promises.length) {
+    r += 1;
+    section('Customers who promised to pay', ['Invoice', 'Amount (RM)', 'Promised by']);
+    s.promises.forEach((p) => line(p.name, p.invoiceNumber, p.amount, `${formatDate(p.date)}${p.broken ? ' · not yet received' : ''}`));
+  }
+  r += 1;
+  section(`Next 7 days (${formatDate(s.next.from)} to ${formatDate(s.next.to)})`, ['Count', 'Amount (RM)', '']);
+  line('Supplier bills due', s.next.apDue.count, s.next.apDue.total);
+  s.next.apList.forEach((b) => line(`   ${b.name}`, b.invoiceNumber, b.amount, `due ${formatDate(b.dueDate)}`));
+  line('Customer payments expected', s.next.arDue.count, s.next.arDue.total);
+  line('Approved staff claims to pay', s.next.claimsToPay.count, s.next.claimsToPay.total);
   return wb;
 }
 

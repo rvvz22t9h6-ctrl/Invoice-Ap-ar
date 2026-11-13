@@ -6,7 +6,8 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, EmptyState, PageHeader, Spinner, StatCard, TypeTag } from '@/components/ui';
+import { Button, Card, EmptyState, PageHeader, Spinner, StatCard, TypeTag } from '@/components/ui';
+import { WeeklySummaryModal } from './WeeklySummaryModal';
 import { AGING_BUCKETS, buildAgingReport } from '@/domain/aging';
 import { buildDashboard } from '@/domain/dashboard';
 import { COMPANY_TIME_ZONE, formatDate, formatDateTime } from '@/domain/dates';
@@ -42,13 +43,18 @@ export function DashboardPage() {
   if (isLoading) return <div className="grid h-64 place-items-center text-slate-400"><Spinner /></div>;
   if (error) return <EmptyState title="Could not load data" description={(error as Error).message} />;
 
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
   return (
     <>
       <PageHeader eyebrow={`${greeting} · ${formatDate(today)}`} title="Dashboard" subtitle={`Live position of ${settings.companyName || 'your company'}'s payables and receivables, calculated from invoice and payment records.`}
-        actions={<ExportExcelButton variant="primary" label="Export full report to Excel" testId="export-full-report"
-          fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today, settings.companyName, settings)} disabled={!invoices.length} />} />
+        actions={<>
+          <Button onClick={() => setSummaryOpen(true)} disabled={!invoices.length} data-testid="weekly-summary">Weekly summary</Button>
+          <ExportExcelButton variant="primary" label="Export full report to Excel" testId="export-full-report"
+            fileName={`Finance-Report-${today}.xlsx`} build={() => buildFullReport(invoices, today, settings.companyName, settings)} disabled={!invoices.length} />
+        </>} />
+      {summaryOpen && <WeeklySummaryModal invoices={invoices} today={today} companyName={settings.companyName} onClose={() => setSummaryOpen(false)} />}
 
       {invoices.length === 0 && (
         <section className="mb-6 rounded-xl border border-navy-100 bg-navy-50 p-6" data-testid="welcome">

@@ -19,6 +19,7 @@ import { attachmentsEnabled, autoFillEnabled, deleteAttachmentFile } from '@/lib
 import { AttachmentDrop, AttachmentList } from './AttachmentDrop';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useActivity, useInvoiceMutations, useInvoices } from '@/hooks/useFinanceData';
+import { FollowUpSection } from './FollowUps';
 import { InvoiceFormModal } from './InvoiceFormModal';
 import { PaymentFormModal } from './PaymentFormModal';
 
@@ -214,6 +215,9 @@ export function InvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string |
           </table>
         </div>
       )}
+
+      {/* 跟進紀錄 */}
+      <FollowUpSection invoice={invoice} canEdit={can(role, 'invoice.edit')} />
 
       {/* 歷程 */}
       <h3 className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>

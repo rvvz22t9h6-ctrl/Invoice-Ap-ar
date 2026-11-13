@@ -17,6 +17,7 @@ import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
 import type { CleanupPlan } from '@/domain/retention';
 import type { Note } from '@/domain/notes';
+import type { FollowUp } from '@/domain/followups';
 
 /** 週期規則可由使用者設定的欄位。 */
 export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
@@ -56,6 +57,10 @@ export interface Repository {
   recordPayment(invoiceId: string, values: PaymentFormValues): Promise<void>;
   /** 沖銷付款（僅管理員）。 */
   reversePayment(paymentId: string): Promise<void>;
+
+  // ---------- 催款／付款跟進紀錄 ----------
+  addFollowUp(invoiceId: string, followUp: FollowUp): Promise<void>;
+  deleteFollowUp(invoiceId: string, followUpId: string): Promise<void>;
 
   // ---------- 供應商／客戶與公司設定 ----------
   updateCounterparty(id: string, patch: CounterpartyPatch): Promise<Counterparty>;

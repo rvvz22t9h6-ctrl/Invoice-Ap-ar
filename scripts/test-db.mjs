@@ -274,6 +274,19 @@ test('checklists: one per kind and month; invoice remarks', async () => {
   assert.equal(r.remarks, 'Promised Friday');
 });
 
+test('invoice follow-ups: finance writes, viewer reads only, removed with the invoice', async () => {
+  const { rows: [inv] } = await asCommit('finance', insertAR('FU-DB-1'));
+  await asCommit('finance', `insert into invoice_follow_ups (id, invoice_id, follow_up_date, note, promised_date, next_date) values ('fu1', $1, current_date, 'Will pay Friday', current_date + 3, current_date + 4)`, [inv.id]);
+  await assert.rejects(as('finance', `insert into invoice_follow_ups (id, invoice_id, follow_up_date, note) values ('fu2', $1, current_date, '  ')`, [inv.id]), /invoice_follow_ups_note_check/);
+  await assert.rejects(as('finance', `insert into invoice_follow_ups (id, invoice_id, follow_up_date, note, next_date) values ('fu3', $1, current_date, 'x', current_date - 1)`, [inv.id]), /follow_ups_next_after/);
+  const { rows } = await as('viewer', `select id from invoice_follow_ups where invoice_id = $1`, [inv.id]);
+  assert.deepEqual(rows.map((r) => r.id), ['fu1']);
+  await assert.rejects(as('viewer', `insert into invoice_follow_ups (id, invoice_id, follow_up_date, note) values ('fu4', $1, current_date, 'x')`, [inv.id]), /row-level security/);
+  await asCommit('admin', `delete from invoices where id = $1`, [inv.id]);
+  const { rows: after } = await as('finance', `select id from invoice_follow_ups where id = 'fu1'`);
+  assert.equal(after.length, 0);
+});
+
 test('notes are private to the person who wrote them', async () => {
   await asCommit('finance', `insert into notes (id, title, body) values ('n1', 'Mine', 'secret')`);
   const { rows: own } = await as('finance', `select id from notes`);

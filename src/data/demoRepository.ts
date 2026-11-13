@@ -7,7 +7,7 @@
  *   - 重複發票號碼、超額付款、未審批不可付款、有付款不可取消
  *   - 活動紀錄文字格式與資料庫相同
  */
-import { addDays, todayIso, type IsoDate } from '@/domain/dates';
+import { addDays, formatDate, todayIso, type IsoDate } from '@/domain/dates';
 import { computeInvoice } from '@/domain/invoice';
 import { formatMYR } from '@/domain/money';
 import type { ActivityEntry, ApprovalStatus, Attachment, CompanySettings, Counterparty, CounterpartyKind, Invoice, InvoiceType, Payment, UserProfile } from '@/domain/types';
@@ -20,6 +20,7 @@ import type { Checklist } from '@/domain/checklists';
 import { isValidClaimRecord, type StaffClaim } from '@/domain/claims';
 import { planCleanup, type CleanupPlan } from '@/domain/retention';
 import { isValidNoteRecord, type Note } from '@/domain/notes';
+import { isValidFollowUpRecord, type FollowUp } from '@/domain/followups';
 import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
@@ -464,6 +465,22 @@ export class DemoRepository implements Repository {
     inv.attachments = [...(inv.attachments ?? []).filter((a) => a.id !== attachment.id), attachment];
     inv.updatedAt = new Date().toISOString();
     this.log(inv.id, 'attachment.added', `Attached ${attachment.name} to ${this.label(inv)}`);
+    this.commit();
+  }
+
+  async addFollowUp(invoiceId: string, followUp: FollowUp) {
+    this.require('admin', 'finance');
+    if (!isValidFollowUpRecord(followUp)) throw new DomainError('VALIDATION', 'Invalid follow-up');
+    const inv = this.find(invoiceId);
+    inv.followUps = [...(inv.followUps ?? []).filter((f) => f.id !== followUp.id), followUp];
+    this.log(inv.id, 'followup.added', `Follow-up on ${this.label(inv)}${followUp.promisedDate ? ` · promised ${formatDate(followUp.promisedDate)}` : ''}`);
+    this.commit();
+  }
+
+  async deleteFollowUp(invoiceId: string, followUpId: string) {
+    this.require('admin', 'finance');
+    const inv = this.find(invoiceId);
+    inv.followUps = (inv.followUps ?? []).filter((f) => f.id !== followUpId);
     this.commit();
   }
 

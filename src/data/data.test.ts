@@ -351,6 +351,24 @@ describe('Private notes (local mode)', () => {
   });
 });
 
+describe('Invoice follow-ups', () => {
+  it('finance adds and removes follow-ups; viewer cannot; invalid records are rejected', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const inv = await repo.createInvoice('AR', form({ invoiceNumber: 'FU-1' }));
+    const f = { id: 'f1', date: TODAY, contact: 'Aida', note: 'Will pay Friday', promisedDate: TODAY, nextDate: null, createdAt: new Date().toISOString() };
+    await repo.addFollowUp(inv.id, f);
+    await repo.addFollowUp(inv.id, { ...f, id: 'f2', note: 'Second call' });
+    const back = (await repo.listInvoices()).find((i) => i.id === inv.id)!;
+    expect(back.followUps!.map((x) => x.note)).toEqual(['Will pay Friday', 'Second call']);
+    expect((await repo.listActivity({ invoiceId: inv.id })).some((a) => a.action === 'followup.added')).toBe(true);
+    await expect(repo.addFollowUp(inv.id, { ...f, id: 'f3', note: ' ' })).rejects.toThrow(/Invalid/);
+    await repo.deleteFollowUp(inv.id, 'f1');
+    expect((await repo.listInvoices()).find((i) => i.id === inv.id)!.followUps!.map((x) => x.id)).toEqual(['f2']);
+    await repo.signIn('boss@demo.my', 'demo1234');
+    await expect(repo.addFollowUp(inv.id, f)).rejects.toThrow(/read-only/);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

@@ -19,6 +19,7 @@ import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } f
 import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
 import type { Note } from '@/domain/notes';
+import type { FollowUp } from '@/domain/followups';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
@@ -35,9 +36,11 @@ interface InvoiceRow {
   approval_status: ApprovalStatus | null; is_cancelled: boolean; cancel_reason: string; created_at: string; updated_at: string;
   counterparty: { name: string } | null;
   payments: PaymentRow[];
+  follow_ups?: FollowUpRow[];
 }
+interface FollowUpRow { id: string; follow_up_date: string; contact: string; note: string; promised_date: string | null; next_date: string | null; created_at: string }
 
-const INVOICE_SELECT = '*, counterparty:counterparties(name), payments(*)';
+const INVOICE_SELECT = '*, counterparty:counterparties(name), payments(*), follow_ups:invoice_follow_ups(*)';
 const PAGE_SIZE = 1000; // PostgREST 預設單次最多回傳 1000 筆
 
 /** 資料庫金額 → 整數仙。 */
@@ -64,6 +67,7 @@ function mapInvoice(r: InvoiceRow): Invoice {
     invoiceAmount: sen(r.invoice_amount), taxAmount: sen(r.tax_amount), approvalStatus: r.approval_status,
     isCancelled: r.is_cancelled, cancelReason: r.cancel_reason, createdAt: r.created_at, updatedAt: r.updated_at,
     createdByName: null, payments: (r.payments ?? []).map(mapPayment).sort((a, b) => a.paymentDate.localeCompare(b.paymentDate)),
+    followUps: (r.follow_ups ?? []).map((f): FollowUp => ({ id: f.id, date: f.follow_up_date, contact: f.contact, note: f.note, promisedDate: f.promised_date, nextDate: f.next_date, createdAt: f.created_at })),
   };
 }
 
@@ -369,6 +373,16 @@ export class SupabaseRepository implements Repository {
   async saveChecklist(c: Checklist) {
     check(await this.db.from('checklists').upsert({ id: c.id, kind: c.kind, month: c.month, items: c.items, remarks: c.remarks, due_date: c.dueDate, updated_at: new Date().toISOString() }).select('id'));
     return c;
+  }
+
+  // ---------- 催款／付款跟進紀錄 ----------
+
+  async addFollowUp(invoiceId: string, f: FollowUp) {
+    check(await this.db.from('invoice_follow_ups').upsert({ id: f.id, invoice_id: invoiceId, follow_up_date: f.date, contact: f.contact, note: f.note, promised_date: f.promisedDate, next_date: f.nextDate }).select('id'));
+  }
+
+  async deleteFollowUp(_invoiceId: string, followUpId: string) {
+    check(await this.db.from('invoice_follow_ups').delete().eq('id', followUpId).select('id'));
   }
 
   // ---------- 私人筆記（RLS：只有建立者本人可讀寫）----------

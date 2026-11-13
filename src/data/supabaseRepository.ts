@@ -18,6 +18,7 @@ import { validateTaskInput, type Task, type TaskCategory, type TaskInput, type T
 import { generateRecurringTasks, resetFutureOccurrences, type RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
+import type { Note } from '@/domain/notes';
 
 // ---------- 資料庫列型別 ----------
 interface PaymentRow {
@@ -370,6 +371,25 @@ export class SupabaseRepository implements Repository {
     return c;
   }
 
+  // ---------- 私人筆記（RLS：只有建立者本人可讀寫）----------
+
+  notesAvailable() {
+    return true; // 實際權限由資料庫決定（檢視者寫入會被拒絕，畫面上也會隱藏）
+  }
+
+  async listNotes() {
+    const rows = check(await this.db.from('notes').select('*').order('updated_at', { ascending: false })) as NoteRow[];
+    return rows.map((r): Note => ({ id: r.id, title: r.title, body: r.body, category: r.category, pinned: r.pinned, createdAt: r.created_at, updatedAt: r.updated_at }));
+  }
+
+  async saveNote(n: Note) {
+    check(await this.db.from('notes').upsert({ id: n.id, title: n.title, body: n.body, category: n.category, pinned: n.pinned, updated_at: n.updatedAt }).select('id'));
+  }
+
+  async deleteNote(id: string) {
+    check(await this.db.from('notes').delete().eq('id', id).select('id'));
+  }
+
   // ---------- 員工報銷 ----------
 
   async listClaims() {
@@ -386,6 +406,8 @@ export class SupabaseRepository implements Repository {
     check(await this.db.from('staff_claims').delete().eq('id', id).select('id'));
   }
 }
+
+interface NoteRow { id: string; title: string; body: string; category: Note['category']; pinned: boolean; created_at: string; updated_at: string }
 
 interface ClaimRow {
   id: string; claim_no: string; staff_name: string; expense_date: string; category: StaffClaim['category']; description: string; amount_sen: number | string;

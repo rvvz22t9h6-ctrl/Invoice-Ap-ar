@@ -334,6 +334,23 @@ describe('Staff claims', () => {
   });
 });
 
+describe('Private notes (local mode)', () => {
+  it('finance can save and delete notes; the viewer cannot use them', async () => {
+    await repo.signIn('finance@demo.my', 'demo1234');
+    const n = { id: 'n1', title: 'Petty cash', body: 'Float is RM 500', category: 'General' as const, pinned: true, createdAt: '', updatedAt: '' };
+    await repo.saveNote(n);
+    await repo.saveNote({ ...n, body: 'Float is RM 800' });
+    expect(await repo.listNotes()).toEqual([{ ...n, body: 'Float is RM 800' }]);
+    await expect(repo.saveNote({ ...n, title: '' })).rejects.toThrow(/Invalid/);
+    await repo.signIn('boss@demo.my', 'demo1234');
+    expect(repo.notesAvailable()).toBe(false);
+    await expect(repo.listNotes()).rejects.toThrow();
+    await repo.signIn('finance@demo.my', 'demo1234');
+    await repo.deleteNote('n1');
+    expect(await repo.listNotes()).toEqual([]);
+  });
+});
+
 describe('Supabase error mapping', () => {
   it('turns database errors into user-friendly messages', () => {
     expect(toDomainError({ code: '23505', message: 'duplicate key value violates unique constraint "invoices_ar_number_uq"', details: '', hint: '', name: '' }).message)

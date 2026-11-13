@@ -61,6 +61,13 @@ test('phone bottom bar: tabs and the + button open the right form on the spot', 
   await page.getByTestId('quick-task').click();
   await expect(page.getByRole('heading', { name: 'New task' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
+  // ＋ → 筆記
+  await page.getByTestId('quick-record').click();
+  await page.getByTestId('quick-note').click();
+  await expect(page.getByRole('heading', { name: 'New note' })).toBeVisible();
+  await page.getByTestId('note-body').fill('Remember to ask about the deposit');
+  await page.getByTestId('save-note').click();
+  await expect(page.getByTestId('note-card')).toContainText('Remember to ask about the deposit');
   // ＋ → 供應商帳單
   await page.getByTestId('quick-record').click();
   await page.getByTestId('quick-ap').click();

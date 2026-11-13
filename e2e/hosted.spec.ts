@@ -283,3 +283,25 @@ test('automatic backup: saved before "Delete all data" and restored in two taps'
   await openNav(page, 'Accounts Receivable');
   await expect(page.getByTestId('invoice-table')).toContainText('Precious Customer Sdn Bhd');
 });
+
+test('notes are saved in the owner\'s private space and survive a reload', async ({ page }) => {
+  await open(page);
+  await openNav(page, 'Notes');
+  await page.getByTestId('new-note').click();
+  await page.getByTestId('note-title').fill('Bank token location');
+  await page.getByTestId('note-body').fill('Top drawer, blue pouch');
+  await page.getByTestId('save-note').click();
+  await expect(page.getByTestId('note-card')).toContainText('Bank token location');
+  const keys = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('fake-artifact-db') || '{}')).filter((k) => k.includes('notes')));
+  expect(keys).toHaveLength(1);
+  expect(keys[0]).toMatch(/^data\/users\/owner\/notes\/items\//);
+  await page.reload();
+  await openNav(page, 'Notes');
+  await expect(page.getByTestId('note-card')).toContainText('Top drawer, blue pouch');
+});
+
+test('view-only visitors do not get Notes', async ({ page }) => {
+  await open(page, 'viewer');
+  await expect(page.getByTestId('task-kpi-today')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Notes', exact: true })).toHaveCount(0);
+});

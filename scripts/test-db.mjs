@@ -274,6 +274,20 @@ test('checklists: one per kind and month; invoice remarks', async () => {
   assert.equal(r.remarks, 'Promised Friday');
 });
 
+test('notes are private to the person who wrote them', async () => {
+  await asCommit('finance', `insert into notes (id, title, body) values ('n1', 'Mine', 'secret')`);
+  const { rows: own } = await as('finance', `select id from notes`);
+  assert.deepEqual(own.map((r) => r.id), ['n1']);
+  const { rows: other } = await as('admin', `select id from notes`);
+  assert.equal(other.length, 0); // 連管理員也看不到別人的筆記
+  const { rows: boss } = await as('viewer', `select id from notes`);
+  assert.equal(boss.length, 0);
+  await assert.rejects(as('viewer', `insert into notes (id, title) values ('n2', 'x')`), /row-level security/);
+  const { rowCount } = await as('admin', `update notes set title = 'hacked' where id = 'n1'`);
+  assert.equal(rowCount, 0);
+  await assert.rejects(as('finance', `insert into notes (id, title, category) values ('n3', 'x', 'Other')`), /notes_category_check/);
+});
+
 test('staff claims: status rules, mileage, unique numbers and row-level security', async () => {
   const ins = (id, no, extra = '') => `insert into staff_claims (id, claim_no, staff_name, expense_date, category, description, amount_sen${extra ? ', ' + extra.split('=')[0] : ''})
     values ('${id}', '${no}', 'Ali', current_date, 'Petrol', 'Fuel', 5000${extra ? ', ' + extra.split('=')[1] : ''})`;

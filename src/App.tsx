@@ -15,6 +15,7 @@ import { CashFlowPage } from '@/features/cashflow/CashFlowPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { MyDayPage } from '@/features/tasks/MyDayPage';
 import { ClaimsPage } from '@/features/claims/ClaimsPage';
+import { NotesPage } from '@/features/notes/NotesPage';
 import { ChecklistPage } from '@/features/checklists/ChecklistPage';
 import { TaskCalendarPage } from '@/features/tasks/TaskCalendarPage';
 import { AllTasksPage } from '@/features/tasks/AllTasksPage';
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="payroll" element={<ChecklistPage key="payroll" kind="payroll" />} />
         <Route path="closing" element={<ChecklistPage key="closing" kind="closing" />} />
         <Route path="claims" element={<ClaimsPage />} />
+        <Route path="notes" element={<NotesPage />} />
         {/* key 讓 AP 與 AR 切換時重新建立元件，篩選狀態不會互相影響 */}
         <Route path="ap" element={<InvoicesPage key="AP" type="AP" />} />
         <Route path="ar" element={<InvoicesPage key="AR" type="AR" />} />

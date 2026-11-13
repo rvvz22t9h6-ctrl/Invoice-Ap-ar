@@ -16,6 +16,7 @@ import type { RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
 import type { CleanupPlan } from '@/domain/retention';
+import type { Note } from '@/domain/notes';
 
 /** 週期規則可由使用者設定的欄位。 */
 export type RecurrenceInput = Omit<RecurrenceRule, 'id' | 'generatedThrough' | 'skipDates' | 'createdAt' | 'updatedAt'>;
@@ -87,6 +88,13 @@ export interface Repository {
   /** 新增或覆寫多筆報銷（批次核准／付款一次寫入）。 */
   saveClaims(claims: StaffClaim[]): Promise<void>;
   deleteClaim(id: string): Promise<void>;
+
+  // ---------- 私人筆記（只有本人看得到；檢視者不可用）----------
+  /** 目前使用者是否可使用筆記。 */
+  notesAvailable(): boolean;
+  listNotes(): Promise<Note[]>;
+  saveNote(note: Note): Promise<void>;
+  deleteNote(id: string): Promise<void>;
 
   // ---------- 附件（僅雲端模式提供檔案儲存）----------
   /** 將已上傳的附件記錄到發票上。 */

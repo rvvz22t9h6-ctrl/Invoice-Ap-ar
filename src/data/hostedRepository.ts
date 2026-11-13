@@ -15,6 +15,7 @@
  *   meta/recurrences        週期任務規則
  *   checklists/<YYYY-MM>    薪資與月結檢查清單（每月一份文件）
  *   claims/<YYYY-MM>        員工報銷（依支出月份分組）
+ *   data/users/<id>/notes/items/<noteId>   私人筆記（平台保證只有本人可讀寫；不在備份與一般儲存流程內）
  *
  * 寫入策略：每次變更後比對各文件內容，只寫入有變動的文件；
  * 同一時間只進行一個寫入（依序排隊），並把狀態回報給畫面（儲存中／已儲存／失敗）。
@@ -26,6 +27,7 @@ import type { Task } from '@/domain/tasks';
 import type { RecurrenceRule } from '@/domain/recurrence';
 import type { Checklist } from '@/domain/checklists';
 import type { StaffClaim } from '@/domain/claims';
+import { isValidNoteRecord, type Note } from '@/domain/notes';
 import { DemoRepository, memoryStore, STATE_VERSION, type DemoState } from './demoRepository';
 
 // ---------- 平台 db 介面（僅列出用到的部分）----------
@@ -101,6 +103,9 @@ export class HostedRepository extends DemoRepository {
   private status: SaveStatus = { state: 'saved' };
   private backupStore: BackupStore | null = null;
   private backups: BackupEntry[] = [];
+  /** 平台給的使用者 id（私人筆記的路徑）；沒有身分時為 null。 */
+  private privateId: string | null = null;
+  private privateNotes: Note[] | null = null;
 
   private constructor(private readonly db: HostedDb, profile: UserProfile) {
     super(memoryStore(), () => todayIso(), 0);
@@ -118,6 +123,7 @@ export class HostedRepository extends DemoRepository {
       role: canEdit ? 'admin' : 'viewer',
     };
     const repo = new HostedRepository(db, profile);
+    repo.privateId = me.id;
     await repo.loadFromCloud();
     repo.ready = true;
     // 仍在儲存時離開頁面：請瀏覽器提醒使用者
@@ -244,6 +250,36 @@ export class HostedRepository extends DemoRepository {
       await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
       await fn();
     }
+  }
+
+  // ---------- 私人筆記（data/users/<id>/ 之下，只有本人可讀寫）----------
+
+  private notesPath(): string {
+    if (!this.privateId || this.user?.role === 'viewer') throw new Error('Notes are not available here.');
+    return `data/users/${this.privateId}/notes/items`;
+  }
+
+  override notesAvailable(): boolean {
+    return !!this.privateId && this.user?.role !== 'viewer';
+  }
+
+  override async listNotes(): Promise<Note[]> {
+    if (this.privateNotes) return [...this.privateNotes];
+    const snap = await this.db.collection(this.notesPath()).limit(1000).get();
+    this.privateNotes = snap.docs.map((d) => d.data() as unknown as Note).filter((n) => !!n && isValidNoteRecord(n));
+    return [...this.privateNotes];
+  }
+
+  override async saveNote(note: Note): Promise<void> {
+    if (!isValidNoteRecord(note)) throw new Error('Invalid note');
+    await this.db.doc(`${this.notesPath()}/${note.id}`).set({ ...note });
+    const list = await this.listNotes();
+    this.privateNotes = [...list.filter((n) => n.id !== note.id), note];
+  }
+
+  override async deleteNote(id: string): Promise<void> {
+    await this.db.doc(`${this.notesPath()}/${id}`).delete();
+    this.privateNotes = (await this.listNotes()).filter((n) => n.id !== id);
   }
 
   // ---------- 自動備份 ----------

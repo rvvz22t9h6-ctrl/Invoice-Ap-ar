@@ -22,7 +22,7 @@ function fakeDb() {
     }),
     collection: (path) => ({
       doc: (id) => db.doc(`${path}/${id}`),
-      limit: () => ({ get: async () => ({ docs: [...docs.keys()].filter((k) => k.startsWith(`${path}/`) && k.split('/').length === 2).sort().map(snap) }) }),
+      limit: () => ({ get: async () => ({ docs: [...docs.keys()].filter((k) => k.startsWith(`${path}/`) && k.split('/').length === path.split('/').length + 1).sort().map(snap) }) }),
     }),
   };
   return { db, docs, stats };
@@ -281,6 +281,44 @@ describe('Clean-up of finished records older than 3 months', () => {
     expect(await again.listInvoices()).toHaveLength(0);
     const v = await HostedRepository.create(db, viewer);
     expect(await v.maybeAutoCleanup()).toBe(0);
+  });
+});
+
+describe('HostedRepository private notes', () => {
+  const n = { id: 'note-1', title: 'How to pay ABC', body: 'Cheque only', category: 'AP' as const, pinned: false, createdAt: '2026-11-14T00:00:00Z', updatedAt: '2026-11-14T00:00:00Z' };
+
+  it('stores notes in the owner\'s private space, reloads them, and keeps them out of backups and shared data', async () => {
+    const { db, docs } = fakeDb();
+    const { store, files } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    expect(repo.notesAvailable()).toBe(true);
+    await repo.saveNote(n);
+    await repo.saveNote({ ...n, body: 'Cheque only. Call Ms Lim.' });
+    expect([...docs.keys()].filter((k) => k.includes('note'))).toEqual(['data/users/u1/notes/items/note-1']);
+    await repo.createInvoice('AR', form('N-1'));
+    await repo.createBackup('manual');
+    await repo.whenSaved();
+    expect([...files.values()].join('')).not.toContain('Call Ms Lim');
+    expect(repo.exportBackup()).not.toContain('Call Ms Lim');
+
+    const again = await HostedRepository.create(db, owner);
+    expect(await again.listNotes()).toEqual([{ ...n, body: 'Cheque only. Call Ms Lim.' }]);
+    await again.clearAllData(); // 清空帳務資料不影響筆記
+    await again.whenSaved();
+    expect(await (await HostedRepository.create(db, owner)).listNotes()).toHaveLength(1);
+    await again.deleteNote('note-1');
+    expect(docs.has('data/users/u1/notes/items/note-1')).toBe(false);
+  });
+
+  it('is not available to view-only users or without an identity', async () => {
+    const { db } = fakeDb();
+    const v = await HostedRepository.create(db, viewer);
+    expect(v.notesAvailable()).toBe(false);
+    await expect(v.listNotes()).rejects.toThrow(/not available/);
+    await expect(v.saveNote(n)).rejects.toThrow(/not available/);
+    const anon = await HostedRepository.create(db, { canEdit: async () => true, me: async () => ({ name: '', id: null }) });
+    expect(anon.notesAvailable()).toBe(false);
   });
 });
 

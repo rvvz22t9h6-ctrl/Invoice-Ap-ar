@@ -19,6 +19,7 @@ import { RULE_TEMPLATES } from '@/domain/taskTemplates';
 import type { Checklist } from '@/domain/checklists';
 import { isValidClaimRecord, type StaffClaim } from '@/domain/claims';
 import { planCleanup, type CleanupPlan } from '@/domain/retention';
+import { isValidNoteRecord, type Note } from '@/domain/notes';
 import type { TaskCategory, TaskPriority } from '@/domain/tasks';
 import { kindForType } from '@/domain/types';
 import {
@@ -53,6 +54,8 @@ export interface DemoState {
   checklists?: Checklist[];
   /** 員工報銷。 */
   claims?: StaffClaim[];
+  /** 私人筆記（本機模式存在這裡；雲端模式存在個人專屬空間）。 */
+  notes?: Note[];
   /** 舊資料清除：是否自動、上次清除時間與筆數。 */
   cleanup?: { auto: boolean; lastAt: string | null; lastCount: number };
 }
@@ -628,6 +631,34 @@ export class DemoRepository implements Repository {
   async deleteClaim(id: string) {
     this.require('admin', 'finance');
     this.state.claims = (this.state.claims ?? []).filter((c) => c.id !== id);
+    this.commit();
+    await this.delay(undefined);
+  }
+
+  // ---------- 私人筆記 ----------
+
+  notesAvailable(): boolean {
+    return !!this.user && this.user.role !== 'viewer';
+  }
+
+  async listNotes(): Promise<Note[]> {
+    this.require('admin', 'finance');
+    return this.delay([...(this.state.notes ?? [])]);
+  }
+
+  async saveNote(note: Note): Promise<void> {
+    this.require('admin', 'finance');
+    if (!isValidNoteRecord(note)) throw new DomainError('VALIDATION', 'Invalid note');
+    const list = (this.state.notes ??= []);
+    const i = list.findIndex((n) => n.id === note.id);
+    if (i >= 0) list[i] = note; else list.push(note);
+    this.commit();
+    await this.delay(undefined);
+  }
+
+  async deleteNote(id: string): Promise<void> {
+    this.require('admin', 'finance');
+    this.state.notes = (this.state.notes ?? []).filter((n) => n.id !== id);
     this.commit();
     await this.delay(undefined);
   }

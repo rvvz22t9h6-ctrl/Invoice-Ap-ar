@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from 'react';
 
-export type QuickKind = 'claim' | 'task' | 'ap' | 'ar';
+export type QuickKind = 'claim' | 'task' | 'ap' | 'ar' | 'note';
 
 let pending: QuickKind | null = null;
 const listeners = new Set<() => void>();

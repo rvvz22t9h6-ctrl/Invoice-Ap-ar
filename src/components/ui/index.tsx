@@ -17,7 +17,7 @@ export { cx };
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
-  primary: 'bg-gradient-to-b from-navy-500 to-navy-700 text-white hover:from-navy-600 hover:to-navy-800 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_6px_14px_-6px_rgba(156,74,38,0.6)] disabled:from-navy-300 disabled:to-navy-300 disabled:shadow-none',
+  primary: 'bg-gradient-to-b from-navy-500 to-navy-600 text-white hover:from-navy-600 hover:to-navy-700 shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_6px_14px_-6px_rgba(111,84,176,0.6)] disabled:from-navy-300 disabled:to-navy-300 disabled:shadow-none',
   secondary: 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 shadow-sm',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   danger: 'bg-white text-red-700 ring-1 ring-inset ring-red-200 hover:bg-red-50',
@@ -101,7 +101,7 @@ const ICON_PATH: Record<StatIcon, string> = {
 };
 
 const ACCENT_CHIP: Record<StatAccent, string> = {
-  ar: 'bg-[#e6f5f2] text-series-ar', ap: 'bg-[#fdeee7] text-series-ap', red: 'bg-red-50 text-red-600', navy: 'bg-navy-50 text-navy-700',
+  ar: 'bg-[#e8f3fb] text-series-ar', ap: 'bg-[#fdeeea] text-series-ap', red: 'bg-red-50 text-red-600', navy: 'bg-navy-50 text-navy-700',
   slate: 'bg-slate-100 text-slate-600', green: 'bg-emerald-50 text-emerald-700', amber: 'bg-amber-50 text-amber-700',
 };
 
@@ -110,7 +110,7 @@ export function StatCard({ label, value, hint, accent = 'slate', icon, testId }:
   label: string; value: ReactNode; hint?: ReactNode; accent?: StatAccent; icon?: StatIcon; testId?: string;
 }) {
   return (
-    <div className="group warm-card warm-card-hover relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-4 transition-shadow before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-navy-300 before:via-navy-500 before:to-amber-400 before:opacity-70" data-testid={testId}>
+    <div className="group warm-card warm-card-hover relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-4 transition-shadow before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-[#d9c6f2] before:via-[#f6b6c6] before:to-[#b8e7d2]" data-testid={testId}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</p>
         {icon && (

@@ -77,7 +77,7 @@ export function DashboardPage() {
       </div>
 
       {/* 現金與淨部位 */}
-      <section className="mt-4 grid grid-cols-1 overflow-hidden rounded-xl bg-navy-900 text-white sm:grid-cols-2 xl:grid-cols-4" data-testid="cash-band">
+      <section className="mt-4 grid grid-cols-1 overflow-hidden rounded-2xl deep-panel text-white sm:grid-cols-2 xl:grid-cols-4" data-testid="cash-band">
         {[
           ['Net position (AR − AP)', <span data-testid="net-position">{formatMYR(d.netPosition)}</span>, 'Owed to us minus what we owe'],
           ['Bank balance today (est.)', formatMYR(cf.currentBalance), settings.openingBalanceDate ? 'From your bank balance and payments since' : <Link to="/settings" className="underline">Set your bank balance</Link>],

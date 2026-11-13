@@ -90,7 +90,7 @@ export function AgingPage() {
             </div>
           );
         })}
-        <div className="rounded-xl bg-navy-900 p-4 text-white">
+        <div className="rounded-xl deep-panel p-4 text-white">
           <p className="text-xs font-medium uppercase tracking-wide text-navy-200">Total outstanding</p>
           <p className="tabular mt-1 text-lg font-semibold">{formatMYR(report.total.amount)}</p>
           <p className="text-xs text-navy-200">{report.total.count} invoices</p>

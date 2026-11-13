@@ -66,7 +66,7 @@ export function AppLayout() {
   const navLink = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} end={n.end}
       className={({ isActive }) => cx('relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        isActive ? 'bg-gradient-to-r from-white/[0.16] to-white/[0.04] text-white shadow-[0_1px_0_rgba(255,255,255,0.08)_inset] before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-amber-300' : 'text-navy-200 hover:bg-white/5 hover:text-white')}>
+        isActive ? 'bg-white text-navy-900 shadow-[0_6px_16px_-8px_rgba(111,84,176,0.55)] before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-navy-500' : 'text-navy-800 hover:bg-white/60 hover:text-navy-950')}>
       {n.icon}<span className="flex-1">{n.label}</span>
       {n.to === '/' && attention > 0 && <span aria-hidden title={`${attention} tasks need attention`} className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white" data-testid="nav-task-badge">{attention}</span>}
     </NavLink>
@@ -78,48 +78,48 @@ export function AppLayout() {
 
 
   const sidebar = (
-    <div className="warm-panel flex h-full flex-col text-navy-100">
+    <div className="pastel-panel flex h-full flex-col text-navy-800">
       <div className="flex items-center gap-3 px-5 pt-6 pb-5">
-        <img src={logoUrl} alt="" className="size-10 rounded-xl ring-1 ring-white/10" />
+        <img src={logoUrl} alt="" className="size-10 rounded-xl shadow-[0_6px_14px_-6px_rgba(111,84,176,0.6)] ring-2 ring-white/80" />
         <div className="min-w-0 leading-tight">
-          <p className="font-display truncate text-[15px] font-semibold text-white" title={company} data-testid="company-name">{company}</p>
-          <p className="text-xs text-navy-300">{settings.companyName ? 'Finance Portal · AP & AR' : 'AP & AR Management'}</p>
+          <p className="font-display truncate text-[15px] font-semibold text-navy-950" title={company} data-testid="company-name">{company}</p>
+          <p className="text-xs text-navy-600">{settings.companyName ? 'Finance Portal · AP & AR' : 'AP & AR Management'}</p>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Main">
         <div className="space-y-0.5">{MAIN_NAV.map(navLink)}</div>
         <button type="button" onClick={toggleMore} aria-expanded={moreOpen} data-testid="nav-more"
-          className="mt-5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-400 hover:text-navy-200">
+          className="mt-5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-500 hover:text-navy-700">
           More <span aria-hidden className={cx('transition-transform', moreOpen && 'rotate-90')}>›</span>
         </button>
         {moreOpen && <div className="mt-1 space-y-0.5">{MORE_NAV.map(navLink)}</div>}
       </nav>
-      <div className="space-y-3 border-t border-white/10 px-5 py-4">
+      <div className="space-y-3 border-t border-navy-200/70 px-5 py-4">
         {isLocalMode() && (
-          <div className="rounded-lg bg-white/5 px-3 py-2.5 text-xs text-navy-200">
+          <div className="rounded-xl bg-white/65 px-3 py-2.5 text-xs text-navy-700 ring-1 ring-white">
             {hosted ? (
-              <p className="flex items-center gap-1.5 font-semibold text-white" data-testid="save-status" aria-live="polite">
-                <span className={cx('size-2 rounded-full', save?.state === 'error' ? 'bg-red-400' : save?.state === 'saving' ? 'bg-amber-300' : 'bg-emerald-400')} aria-hidden />
+              <p className="flex items-center gap-1.5 font-semibold text-navy-950" data-testid="save-status" aria-live="polite">
+                <span className={cx('size-2 rounded-full', save?.state === 'error' ? 'bg-red-400' : save?.state === 'saving' ? 'bg-amber-400' : 'bg-emerald-500')} aria-hidden />
                 {save?.state === 'error' ? 'Not saved' : save?.state === 'saving' ? 'Saving…' : 'All changes saved'}
               </p>
-            ) : <p className="font-semibold text-white">Saved in this browser</p>}
+            ) : <p className="font-semibold text-navy-950">Saved in this browser</p>}
             <p className="mt-0.5">{hosted ? 'Stored in your Claude account.' : 'Back up regularly to keep your data safe.'}</p>
             <div className="mt-2 flex gap-3">
-              <button type="button" onClick={async () => { if (await downloadBackup().catch(() => false)) toast('Backup downloaded'); }} className="font-medium text-white underline-offset-2 hover:underline">Backup</button>
-              <button type="button" onClick={() => setDataOpen(true)} className="font-medium text-white underline-offset-2 hover:underline" data-testid="open-data-manager">My data…</button>
+              <button type="button" onClick={async () => { if (await downloadBackup().catch(() => false)) toast('Backup downloaded'); }} className="font-medium text-navy-700 underline-offset-2 hover:underline">Backup</button>
+              <button type="button" onClick={() => setDataOpen(true)} className="font-medium text-navy-700 underline-offset-2 hover:underline" data-testid="open-data-manager">My data…</button>
             </div>
           </div>
         )}
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-full bg-navy-700 text-sm font-semibold text-white" aria-hidden>
+          <div className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-navy-400 to-navy-600 text-sm font-semibold text-white shadow-sm" aria-hidden>
             {user?.fullName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-sm font-medium text-white" title={user?.fullName}>{user?.fullName}</p>
-            <p className="text-xs text-navy-300">{user ? ROLE_LABEL[user.role] : ''}{user?.role === 'viewer' ? ' · read-only' : ''}</p>
+            <p className="truncate text-sm font-medium text-navy-950" title={user?.fullName}>{user?.fullName}</p>
+            <p className="text-xs text-navy-600">{user ? ROLE_LABEL[user.role] : ''}{user?.role === 'viewer' ? ' · read-only' : ''}</p>
           </div>
         </div>
-        {!hosted && <button type="button" onClick={signOut} className="w-full rounded-lg px-3 py-2 text-left text-sm text-navy-200 ring-1 ring-white/10 hover:bg-white/5 hover:text-white">Sign out</button>}
+        {!hosted && <button type="button" onClick={signOut} className="w-full rounded-lg px-3 py-2 text-left text-sm text-navy-700 ring-1 ring-navy-200 hover:bg-white/60 hover:text-navy-950">Sign out</button>}
       </div>
     </div>
   );
@@ -130,7 +130,7 @@ export function AppLayout() {
       <aside className="fixed inset-y-0 left-0 hidden w-64 lg:block">{sidebar}</aside>
 
       {/* 手機版頂部列 */}
-      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center gap-3 warm-panel px-4 py-3 text-white lg:hidden">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center gap-3 deep-panel px-4 py-3 text-white lg:hidden">
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
           <Icon d="M4 6h16M4 12h16M4 18h16" />
         </button>

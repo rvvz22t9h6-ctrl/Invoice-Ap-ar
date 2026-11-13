@@ -40,7 +40,7 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
-      <div className="hidden flex-col justify-between warm-panel p-12 text-white lg:flex">
+      <div className="hidden flex-col justify-between deep-panel p-12 text-white lg:flex">
         <div className="flex items-center gap-3">
           <img src={logoUrl} alt="" className="size-10 rounded-lg ring-1 ring-white/10" />
           <span className="font-semibold">Finance Portal</span>

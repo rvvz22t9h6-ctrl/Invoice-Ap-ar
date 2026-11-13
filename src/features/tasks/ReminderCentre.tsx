@@ -116,7 +116,7 @@ export function DailySummaryBanner() {
   if (dismissed || !isSuccess || (dueToday === 0 && overdue === 0)) return null;
   const summary = reminders.find((r) => r.kind === 'summary');
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-navy-900 px-4 py-3 text-sm text-white" role="status" data-testid="daily-summary">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl deep-panel px-4 py-3 text-sm text-white" role="status" data-testid="daily-summary">
       <p><strong className="font-semibold">Good to know today:</strong> {summary?.message}</p>
       <div className="flex gap-2">
         <Link to="/tasks" className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-navy-900 hover:bg-navy-50">Open Dashboard</Link>

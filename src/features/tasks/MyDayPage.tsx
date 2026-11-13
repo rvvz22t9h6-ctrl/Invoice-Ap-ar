@@ -19,6 +19,7 @@ import { QuickAdd, TaskFormModal, TaskList } from './TaskParts';
 import { useClaims } from '@/features/claims/ClaimsPage';
 import { claimTotals } from '@/domain/claims';
 import { formatMYR } from '@/domain/money';
+import { useQuickNew } from '@/lib/quickRecord';
 
 export function MyDayPage() {
   const { tasks, isLoading } = useTasks();
@@ -33,6 +34,7 @@ export function MyDayPage() {
   const reminders = useMemo(() => buildReminders(tasks, today), [tasks, today]);
   const p = useMemo(() => buildProductivity(tasks, today), [tasks, today]);
   const canEdit = can(user?.role, 'invoice.edit');
+  useQuickNew('task', () => { if (canEdit) setCreating(true); });
   const weekday = new Date().toLocaleDateString('en-MY', { weekday: 'long', timeZone: COMPANY_TIME_ZONE });
 
   if (isLoading) return <div className="grid h-64 place-items-center text-slate-400"><Spinner /></div>;

@@ -24,6 +24,7 @@ import { AttachmentDrop, AttachmentList } from '@/features/invoices/AttachmentDr
 import { useToday } from '@/hooks/useTasks';
 import { AttachmentError, attachmentsEnabled, autoFillEnabled, deleteAttachmentFile, extractReceiptDetails, uploadAttachment } from '@/lib/attachments';
 import { isDeclined } from '@/lib/download';
+import { useQuickNew } from '@/lib/quickRecord';
 
 export const claimsKey = ['claims'] as const;
 
@@ -87,6 +88,7 @@ export function ClaimsPage() {
   const [rejecting, setRejecting] = useState<StaffClaim | null>(null);
   const [exporting, setExporting] = useState(false);
   useEffect(() => setSelected(new Set()), [tab]);
+  useQuickNew('claim', () => { if (canEdit) setCreating(true); });
 
   const totals = useMemo(() => claimTotals(claims, today), [claims, today]);
   const names = useMemo(() => staffNames(claims), [claims]);

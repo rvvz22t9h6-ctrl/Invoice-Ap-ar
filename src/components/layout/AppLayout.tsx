@@ -3,7 +3,8 @@
  * 手機版：導覽列收合為頂部選單按鈕，點擊後滑出。
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { requestNew, type QuickKind } from '@/lib/quickRecord';
 import { DataBanners, DataManagerModal, downloadBackup, isHosted, isLocalMode, useSaveStatus } from '@/features/data/DataManager';
 import { ROLE_LABEL } from '@/domain/types';
 import logoUrl from '@/assets/logo.svg';
@@ -144,7 +145,7 @@ export function AppLayout() {
         </div>
       )}
 
-      <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main className="mx-auto max-w-[1400px] px-4 pt-6 pb-28 sm:px-6 lg:px-8 lg:py-8">
         <div className="mb-3 hidden items-center justify-between gap-3 lg:flex">
           <p className="text-xs font-medium text-slate-400">{new Date(`${today}T00:00:00Z`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })} · Malaysia time</p>
           <ReminderBell />
@@ -154,6 +155,84 @@ export function AppLayout() {
         <Outlet />
         <DataManagerModal open={dataOpen} onClose={() => setDataOpen(false)} />
       </main>
+      <MobileBar canRecord={user?.role !== 'viewer' && !!user} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 手機底部列：常用頁面 + 中央「＋」快速記錄（像 App 一樣，單手可操作）
+// ---------------------------------------------------------------------------
+
+const TABS: { to: string; label: string; d: string; end?: boolean }[] = [
+  { to: '/', label: 'Home', end: true, d: 'M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10' },
+  { to: '/ap', label: 'Payable', d: 'M12 19V5m0 14-6-6m6 6 6-6' },
+  { to: '/ar', label: 'Receivable', d: 'M12 5v14m0-14 6 6m-6-6-6 6' },
+  { to: '/claims', label: 'Claims', d: 'M9 14h6m-6-4h6M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3.5-2-3.5 2-3.5-2z' },
+];
+
+const QUICK: { kind: QuickKind; to: string; title: string; hint: string; emoji: string; tint: string }[] = [
+  { kind: 'claim', to: '/claims', title: 'Staff claim', hint: 'Snap the receipt and the details fill in', emoji: '🧾', tint: 'bg-[#fde6ec]' },
+  { kind: 'task', to: '/', title: 'Task or reminder', hint: 'Something to do or follow up', emoji: '✅', tint: 'bg-[#e3f5ec]' },
+  { kind: 'ap', to: '/ap', title: 'Supplier bill (AP)', hint: 'A bill your company has to pay', emoji: '📥', tint: 'bg-[#ede5fa]' },
+  { kind: 'ar', to: '/ar', title: 'Customer invoice (AR)', hint: 'Money a customer owes you', emoji: '📤', tint: 'bg-[#e4f1fb]' },
+];
+
+function MobileBar({ canRecord }: { canRecord: boolean }) {
+  const [sheet, setSheet] = useState(false);
+  const navigate = useNavigate();
+  const pick = (q: (typeof QUICK)[number]) => {
+    setSheet(false);
+    requestNew(q.kind);
+    navigate(q.to);
+  };
+  const tab = (t: (typeof TABS)[number]) => (
+    <NavLink key={t.to} to={t.to} end={t.end} data-testid={`tab-${t.label.toLowerCase()}`}
+      className={({ isActive }) => cx('flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold', isActive ? 'text-navy-700' : 'text-slate-500')}>
+      {({ isActive }) => (<>
+        <span className={cx('grid h-7 w-12 place-items-center rounded-full transition-colors', isActive && 'bg-navy-100')}><Icon d={t.d} /></span>
+        {t.label}
+      </>)}
+    </NavLink>
+  );
+  return (
+    <>
+      <nav aria-label="Quick" className="fixed inset-x-0 bottom-0 z-30 border-t border-navy-100 bg-white/90 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-8px_24px_-12px_rgba(111,84,176,0.35)] backdrop-blur lg:hidden" data-testid="mobile-bar">
+        <div className="mx-auto flex max-w-md items-end px-2">
+          {TABS.slice(0, 2).map(tab)}
+          {canRecord && (
+            <div className="flex flex-1 justify-center">
+              <button type="button" onClick={() => setSheet(true)} aria-label="Record something new" data-testid="quick-record"
+                className="-mt-5 mb-1.5 grid size-14 place-items-center rounded-full bg-gradient-to-br from-navy-400 to-navy-600 text-white shadow-[0_10px_20px_-6px_rgba(111,84,176,0.7)] ring-4 ring-white active:scale-95">
+                <svg viewBox="0 0 24 24" className="size-7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
+          )}
+          {TABS.slice(2).map(tab)}
+        </div>
+      </nav>
+      {sheet && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-label="Record something new" data-testid="quick-sheet">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setSheet(false)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" aria-hidden />
+            <p className="font-display px-1 text-lg font-semibold text-navy-950">What do you want to record?</p>
+            <ul className="mt-3 space-y-2">
+              {QUICK.map((q) => (
+                <li key={q.kind}>
+                  <button type="button" onClick={() => pick(q)} data-testid={`quick-${q.kind}`}
+                    className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left ring-1 ring-slate-200 active:bg-navy-50">
+                    <span className={cx('grid size-11 shrink-0 place-items-center rounded-xl text-xl', q.tint)} aria-hidden>{q.emoji}</span>
+                    <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-900">{q.title}</span><span className="block text-xs text-slate-500">{q.hint}</span></span>
+                    <span className="text-slate-400" aria-hidden>›</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setSheet(false)} className="mt-3 w-full rounded-xl py-2.5 text-sm font-medium text-slate-600">Cancel</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

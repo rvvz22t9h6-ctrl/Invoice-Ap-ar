@@ -27,6 +27,7 @@ import { InvoiceFormModal } from './InvoiceFormModal';
 import { ExportExcelButton } from '@/components/ui/ExportExcelButton';
 import { buildInvoiceListWorkbook } from '@/lib/excelExport';
 import { ACCEPT_ATTR, attachmentsEnabled } from '@/lib/attachments';
+import { useQuickNew } from '@/lib/quickRecord';
 
 /** 「未付清」= 未取消且有未付餘額（含 Pending、Partially Paid、Overdue）。 */
 const OUTSTANDING = 'Outstanding';
@@ -39,6 +40,7 @@ export function InvoicesPage({ type }: { type: InvoiceType }) {
   const [params, setParams] = useSearchParams();
   // 從儀表板「新增發票」連結進入時（?new=1）直接開啟表單
   const [creating, setCreating] = useState(() => params.get('new') === '1' && can(user?.role, 'invoice.create'));
+  useQuickNew(type === 'AP' ? 'ap' : 'ar', () => { if (can(user?.role, 'invoice.create')) setCreating(true); });
   const [openId, setOpenId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   // AP 批次操作：可選取「待審批」（管理員審批）或「已審批且未付清」（批次付款）的帳單

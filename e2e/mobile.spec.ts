@@ -41,3 +41,41 @@ test('staff claims on a phone: cards with amount and one-tap approve', async ({ 
   await page.getByTestId('new-claim').click();
   await expect(page.getByTestId('claim-staff')).toBeVisible();
 });
+
+test('phone bottom bar: tabs and the + button open the right form on the spot', async ({ page }) => {
+  await login(page, 'admin');
+  await expect(page.getByTestId('mobile-bar')).toBeVisible();
+  // ＋ → 員工報銷：切到報銷頁並直接開啟表單
+  await page.getByTestId('quick-record').click();
+  await page.getByTestId('quick-claim').click();
+  await expect(page.getByRole('heading', { name: 'New staff claim' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('heading', { name: 'Staff Claims' })).toBeVisible();
+  // 已在報銷頁時再按一次也會開啟
+  await page.getByTestId('quick-record').click();
+  await page.getByTestId('quick-claim').click();
+  await expect(page.getByTestId('claim-staff')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  // ＋ → 任務
+  await page.getByTestId('quick-record').click();
+  await page.getByTestId('quick-task').click();
+  await expect(page.getByRole('heading', { name: 'New task' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  // ＋ → 供應商帳單
+  await page.getByTestId('quick-record').click();
+  await page.getByTestId('quick-ap').click();
+  await expect(page.getByRole('dialog')).toContainText(/supplier/i);
+  await page.keyboard.press('Escape');
+  // 分頁切換
+  await page.getByTestId('tab-receivable').click();
+  await expect(page.getByRole('heading', { name: 'Accounts Receivable' })).toBeVisible();
+  await page.getByTestId('tab-home').click();
+  await expect(page.getByTestId('task-kpi-today')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+test('the boss (read-only) gets the tabs but no + button', async ({ page }) => {
+  await login(page, 'viewer');
+  await expect(page.getByTestId('tab-claims')).toBeVisible();
+  await expect(page.getByTestId('quick-record')).toHaveCount(0);
+});

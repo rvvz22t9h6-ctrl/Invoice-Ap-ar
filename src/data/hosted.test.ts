@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { invoiceFormSchema, paymentFormSchema } from '@/domain/validation';
 import { todayIso } from '@/domain/dates';
-import { HostedRepository, shardInvoices, type HostedDb, type HostedUser } from './hostedRepository';
+import { BACKUP_KEEP, HostedRepository, shardInvoices, type BackupStore, type HostedDb, type HostedUser } from './hostedRepository';
 import { buildInitialDemoState } from './demoRepository';
 import { newChecklist } from '@/domain/checklists';
 import { newClaim, validateClaim } from '@/domain/claims';
@@ -155,6 +155,78 @@ describe('HostedRepository staff claims', () => {
     await again.whenSaved();
     expect(docs.has('tasks/2027-03')).toBe(false);
     expect((await (await HostedRepository.create(db, owner)).listTasks()).some((x) => x.id === t.id)).toBe(false);
+  });
+});
+
+/** 模擬備份檔案的儲存空間。 */
+function fakeStore() {
+  const files = new Map<string, string>();
+  let n = 0;
+  const store: BackupStore = {
+    upload: async (blob) => { n += 1; const id = `b${n}`; files.set(id, await blob.text()); return { id, sizeBytes: blob.size }; },
+    delete: async (id) => { files.delete(id); },
+    read: async (id) => { if (!files.has(id)) throw new Error('missing'); return files.get(id)!; },
+  };
+  return { store, files };
+}
+
+describe('HostedRepository automatic backups', () => {
+  it('backs up weekly, not more often, and never backs up empty or sample data', async () => {
+    const { db } = fakeDb();
+    const { store, files } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    expect(await repo.maybeAutoBackup()).toBe(false); // 空的
+    await repo.resetDemoData();
+    expect(await repo.maybeAutoBackup()).toBe(false); // 範例資料
+    await repo.clearAllData();
+    await repo.createInvoice('AR', form('B-1'));
+    expect(await repo.maybeAutoBackup()).toBe(true);
+    expect(files.size).toBe(1);
+    expect(await repo.maybeAutoBackup()).toBe(false); // 未滿 7 天
+    expect(await repo.maybeAutoBackup(new Date(Date.now() + 8 * 86_400_000))).toBe(true);
+    const list = await repo.listBackups();
+    expect(list.map((b) => b.reason)).toEqual(['weekly', 'weekly']);
+    expect(list[0]).toMatchObject({ invoices: 1 });
+    expect(repo.dataStatus().lastBackupAt).toBe(list[0]!.at);
+  });
+
+  it('saves a backup before "Delete all data" and restores it, surviving a reload', async () => {
+    const { db } = fakeDb();
+    const { store } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    await repo.createInvoice('AR', form('KEEP-1'));
+    await repo.saveTask({ title: 'Keep me', category: 'GL', priority: 'Low', dueDate: today });
+    await repo.clearAllData();
+    await repo.whenSaved();
+    expect(await repo.listInvoices()).toHaveLength(0);
+
+    const again = await HostedRepository.create(db, owner); // 重新開啟：備份清單仍在
+    again.setBackupStore(store);
+    const [b] = await again.listBackups();
+    expect(b).toMatchObject({ reason: 'before-delete', invoices: 1, tasks: 1 });
+    await again.restoreBackup(b!.id);
+    await again.whenSaved();
+    expect((await again.listInvoices()).map((i) => i.invoiceNumber)).toEqual(['KEEP-1']);
+    expect((await again.listTasks()).map((t) => t.title)).toEqual(['Keep me']);
+    const third = await HostedRepository.create(db, owner);
+    expect(await third.listInvoices()).toHaveLength(1);
+  });
+
+  it('keeps only the latest backups and deletes older files; viewers get none', async () => {
+    const { db } = fakeDb();
+    const { store, files } = fakeStore();
+    const repo = await HostedRepository.create(db, owner);
+    repo.setBackupStore(store);
+    await repo.createInvoice('AR', form('P-1'));
+    for (let i = 0; i < BACKUP_KEEP + 3; i += 1) await repo.createBackup('manual');
+    expect(await repo.listBackups()).toHaveLength(BACKUP_KEEP);
+    expect(files.size).toBe(BACKUP_KEEP);
+    const v = await HostedRepository.create(db, viewer);
+    v.setBackupStore(store);
+    expect(v.backupsAvailable()).toBe(false);
+    expect(await v.createBackup('manual')).toBeNull();
   });
 });
 

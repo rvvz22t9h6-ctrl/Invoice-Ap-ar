@@ -44,7 +44,18 @@ export async function initRepository(): Promise<void> {
   if (!db) throw new Error('Your data could not be reached. Make sure you are signed in to claude.ai, then reload the page.');
   setAttachmentServices(assets, sample);
   if (downloads) setFileSaver(async (filename, data) => { await downloads.save({ filename, data }); });
-  repository = await HostedRepository.create(db, user);
+  const repo = await HostedRepository.create(db, user);
+  // 自動備份：檔案存在平台 assets；開啟時與之後每 6 小時檢查一次是否滿 7 天
+  const store = assets as unknown as { upload(b: Blob, o?: { type?: string }): Promise<{ id: string; sizeBytes: number }>; delete(id: string): Promise<unknown> } | null;
+  repo.setBackupStore(store ? {
+    upload: (blob) => store.upload(blob, { type: 'application/json' }),
+    delete: (id) => store.delete(id),
+    read: async (id) => { const r = await fetch(`/_blob/${id}`); if (!r.ok) throw new Error('This backup could not be read. Please try again.'); return r.text(); },
+  } : null);
+  const auto = () => { void repo.maybeAutoBackup().catch(() => false); };
+  void repo.listBackups().catch(() => []).then(auto);
+  setInterval(auto, 6 * 3_600_000);
+  repository = repo;
 }
 
 export type { Repository } from './repository';

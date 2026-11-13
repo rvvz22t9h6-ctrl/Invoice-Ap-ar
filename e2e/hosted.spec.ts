@@ -37,7 +37,13 @@ async function open(page: Page, role: 'owner' | 'viewer' = 'owner') {
     (window as unknown as { __deleted: unknown }).__deleted = deleted;
     let n = 0;
     const assets = r === 'owner' ? {
-      upload: async (blob: Blob, o?: { type?: string }) => { n += 1; const id = String(n).padStart(32, 'a'); return { id, url: `/_blob/${id}`, sizeBytes: blob.size, contentType: o?.type ?? blob.type }; },
+      upload: async (blob: Blob, o?: { type?: string }) => {
+        n = Number(localStorage.getItem('fake-blob-n') || '0') + 1; localStorage.setItem('fake-blob-n', String(n));
+        const id = String(n).padStart(32, 'a');
+        // JSON（自動備份）會保留內容，供 /_blob/<id> 讀回
+        if ((o?.type ?? blob.type) === 'application/json') localStorage.setItem(`fake-blob-${id}`, await blob.text());
+        return { id, url: `/_blob/${id}`, sizeBytes: blob.size, contentType: o?.type ?? blob.type };
+      },
       delete: async (id: string) => { deleted.push(id); return { deleted: true }; },
     } : null;
     const sample = {
@@ -54,6 +60,11 @@ async function open(page: Page, role: 'owner' | 'viewer' = 'owner') {
     window.confirm = () => false;
   }, role);
   await page.route('http://artifact.test/', (route) => route.fulfill({ contentType: 'text/html', body: skeleton() }));
+  await page.route('http://artifact.test/_blob/*', async (route) => {
+    const id = route.request().url().split('/').pop()!;
+    const body = await page.evaluate((k) => localStorage.getItem(`fake-blob-${k}`), id);
+    await (body === null ? route.fulfill({ status: 404, body: 'not found' }) : route.fulfill({ contentType: 'application/json', body }));
+  });
   await page.goto('http://artifact.test/');
 }
 const saved = (page: Page) => page.evaluate(() => (window as unknown as { __saved: { filename: string; size: number }[] }).__saved);
@@ -231,4 +242,39 @@ test('staff claims are saved in the cloud', async ({ page }) => {
   await page.getByTestId('claims-tab-approved').click();
   await expect(page.getByTestId('claims-table')).toContainText('Cloud Staff');
   await expect(page.getByTestId('claims-kpi-pay-value')).toHaveText('RM 42.00');
+});
+
+test('automatic backup: saved before "Delete all data" and restored in two taps', async ({ page }) => {
+  await open(page);
+  await openNav(page, 'Accounts Receivable');
+  await page.getByTestId('new-invoice').click();
+  await fillInvoiceForm(page, { number: 'SAFE-001', party: 'Precious Customer Sdn Bhd', amount: '1234.50' });
+  await page.getByRole('dialog').getByTestId('save-invoice').click();
+  await expect(page.getByRole('dialog')).toContainText('SAFE-001');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('invoice-table')).toContainText('SAFE-001');
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+
+  await page.getByTestId('open-data-manager').click();
+  await expect(page.getByTestId('auto-backups')).toContainText('No backups yet');
+  await page.getByTestId('backup-now').click();
+  await expect(page.getByTestId('backup-list')).toContainText('Backed up by you');
+  await page.getByTestId('start-fresh').click();
+  await expect(page.getByTestId('confirm-panel')).toContainText('A backup is saved automatically first');
+  await page.getByTestId('confirm-data-action').click();
+  await expect(page.getByText('SAFE-001')).toHaveCount(0);
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+
+  await page.reload(); // 重新開啟後備份仍在
+  await page.getByTestId('open-data-manager').click();
+  await expect(page.getByTestId('backup-list')).toContainText('Saved before "Delete all data"');
+  await page.getByTestId('restore-auto').first().click();
+  await page.getByTestId('confirm-data-action').click();
+  await expect(page.getByText('Backup restored')).toBeVisible();
+  await openNav(page, 'Accounts Receivable');
+  await expect(page.getByTestId('invoice-table')).toContainText('SAFE-001');
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await openNav(page, 'Accounts Receivable');
+  await expect(page.getByTestId('invoice-table')).toContainText('Precious Customer Sdn Bhd');
 });

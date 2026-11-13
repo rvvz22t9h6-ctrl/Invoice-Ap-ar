@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { repository } from '@/data';
-import type { HostedRepository, SaveStatus } from '@/data/hostedRepository';
+import type { BackupEntry, BackupReason, HostedRepository, SaveStatus } from '@/data/hostedRepository';
 import { formatDateTime, todayIso } from '@/domain/dates';
 import { downloadTextFile, isDeclined } from '@/lib/download';
 import { useInvoices } from '@/hooks/useFinanceData';
@@ -94,9 +94,15 @@ export function DataBanners({ onManage }: { onManage: () => void }) {
 type Pending =
   | { kind: 'clear' }
   | { kind: 'sample' }
-  | { kind: 'restore'; file: File };
+  | { kind: 'restore'; file: File }
+  | { kind: 'auto'; entry: BackupEntry };
 
 /** 「我的資料」對話框。 */
+const REASON_LABEL: Record<BackupReason, string> = {
+  weekly: 'Weekly automatic backup', manual: 'Backed up by you', 'before-delete': 'Saved before "Delete all data"',
+  'before-restore': 'Saved before a restore', 'before-sample': 'Saved before loading sample data',
+};
+
 export function DataManagerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const status = useDataStatus();
   const { user } = useAuth();
@@ -106,6 +112,15 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [backups, setBackups] = useState<BackupEntry[] | null>(null);
+  const hostedRepo = isHosted() ? (repository as HostedRepository) : null;
+  const canAuto = !!hostedRepo?.backupsAvailable();
+  useEffect(() => {
+    if (!open || !canAuto) return undefined;
+    let live = true;
+    hostedRepo!.listBackups().then((b) => { if (live) setBackups(b); }).catch(() => { if (live) setBackups([]); });
+    return () => { live = false; };
+  }, [open, canAuto, hostedRepo]);
   if (!open || !status) return null;
   const isAdmin = user?.role === 'admin';
   const hosted = isHosted();
@@ -129,8 +144,9 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
   const confirmText: Record<Pending['kind'], { title: string; body: string; button: string }> = {
     clear: status.isSample
       ? { title: 'Remove the sample data?', body: 'All sample invoices are removed and the system becomes empty, ready for your real invoices.', button: 'Remove sample data' }
-      : { title: 'Delete all data?', body: 'Every invoice, payment and history entry will be deleted. Download a backup first if you may need them.', button: 'Delete everything' },
+      : { title: 'Delete all data?', body: canAuto ? 'Every invoice, payment, task and claim will be deleted. A backup is saved automatically first, so you can restore it from "Automatic backups" if you change your mind.' : 'Every invoice, payment and history entry will be deleted. Download a backup first if you may need them.', button: 'Delete everything' },
     sample: { title: 'Load sample data?', body: 'Everything currently saved is replaced with sample invoices. Your data is lost unless you have a backup.', button: 'Replace with sample data' },
+    auto: { title: 'Restore this backup?', body: `Everything currently saved is replaced with the backup from ${pending?.kind === 'auto' ? formatDateTime(pending.entry.at) : ''}. Your current data is backed up first, so you can undo this.`, button: 'Restore backup' },
     restore: { title: 'Restore this backup?', body: `Everything currently saved is replaced with the contents of "${pending?.kind === 'restore' ? pending.file.name : ''}".`, button: 'Restore backup' },
   };
 
@@ -138,6 +154,7 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
     if (!pending) return;
     if (pending.kind === 'clear') void run(() => repository.clearAllData!(), status.isSample ? 'Sample data removed. The system is now empty.' : 'All data deleted');
     if (pending.kind === 'sample') void run(() => repository.resetDemoData!(), 'Sample data loaded');
+    if (pending.kind === 'auto') { const id = pending.entry.id; void run(() => hostedRepo!.restoreBackup(id), 'Backup restored'); }
     if (pending.kind === 'restore') { const f = pending.file; void run(async () => repository.importBackup!(await f.text()), 'Backup restored'); }
   };
 
@@ -186,6 +203,34 @@ export function DataManagerModal({ open, onClose }: { open: boolean; onClose: ()
                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setPending({ kind: 'restore', file: f }); }} />
             </div>
           </section>
+
+          {canAuto && (
+            <section data-testid="auto-backups">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold text-slate-900">Automatic backups</h3>
+                <Button size="sm" loading={busy} data-testid="backup-now" onClick={async () => {
+                  setError(''); setBusy(true);
+                  try {
+                    const e = await hostedRepo!.createBackup('manual');
+                    setBackups(await hostedRepo!.listBackups());
+                    toast(e ? 'Backup saved' : 'Nothing to back up yet');
+                  } catch { setError('The backup could not be saved. Please try again.'); } finally { setBusy(false); }
+                }}>Back up now</Button>
+              </div>
+              <p className="mt-1 text-slate-600">A backup is saved automatically every week when you open the portal, and before anything is deleted or replaced. The latest 12 are kept.</p>
+              {backups === null ? <p className="mt-2 text-xs text-slate-500">Loading…</p> : backups.length === 0 ? <p className="mt-2 text-xs text-slate-500">No backups yet. The first one is saved once you have entered your own data.</p> : (
+                <ul className="mt-2 max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg ring-1 ring-slate-200" data-testid="backup-list">
+                  {backups.map((b) => (
+                    <li key={b.id} className="flex items-center gap-3 px-3 py-2">
+                      <span className="min-w-0 flex-1"><span className="block font-medium text-slate-800">{formatDateTime(b.at)}</span>
+                        <span className="block text-xs text-slate-500">{REASON_LABEL[b.reason] ?? 'Backup'} · {b.invoices} invoices · {b.tasks} tasks · {b.claims} claims</span></span>
+                      <Button size="sm" onClick={() => setPending({ kind: 'auto', entry: b })} data-testid="restore-auto">Restore</Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {isAdmin && (
             <section>

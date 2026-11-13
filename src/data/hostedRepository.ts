@@ -77,6 +77,18 @@ export function shardByMonth<T extends { id: string }>(items: T[], dateOf: (item
   return shards;
 }
 
+/** 自動備份的一筆紀錄（檔案存在平台 assets，這裡只記錄指標與摘要）。 */
+export type BackupReason = 'weekly' | 'manual' | 'before-delete' | 'before-restore' | 'before-sample';
+export interface BackupEntry { id: string; at: string; reason: BackupReason; invoices: number; tasks: number; claims: number; sizeBytes: number }
+/** 備份檔的儲存空間（平台 assets）。 */
+export interface BackupStore {
+  upload(blob: Blob): Promise<{ id: string; sizeBytes: number }>;
+  delete(id: string): Promise<unknown>;
+  read(id: string): Promise<string>;
+}
+export const BACKUP_KEEP = 12;
+export const BACKUP_EVERY_DAYS = 7;
+
 export class HostedRepository extends DemoRepository {
   override readonly mode = 'hosted' as const;
   private ready = false;
@@ -87,6 +99,8 @@ export class HostedRepository extends DemoRepository {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private statusListeners = new Set<(s: SaveStatus) => void>();
   private status: SaveStatus = { state: 'saved' };
+  private backupStore: BackupStore | null = null;
+  private backups: BackupEntry[] = [];
 
   private constructor(private readonly db: HostedDb, profile: UserProfile) {
     super(memoryStore(), () => todayIso(), 0);
@@ -230,6 +244,86 @@ export class HostedRepository extends DemoRepository {
       await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
       await fn();
     }
+  }
+
+  // ---------- 自動備份 ----------
+  // 每週自動備份一次（開啟頁面時檢查），並在「刪除全部／還原／載入範例」之前自動備份。
+  // 備份索引存在 meta/backups（不在一般儲存流程內，因此清空資料不會刪除備份）。
+
+  setBackupStore(store: BackupStore | null) {
+    this.backupStore = store;
+  }
+
+  backupsAvailable(): boolean {
+    return !!this.backupStore && this.user?.role === 'admin';
+  }
+
+  async listBackups(): Promise<BackupEntry[]> {
+    const doc = await this.db.doc('meta/backups').get();
+    this.backups = ((doc.data() as { items?: BackupEntry[] } | undefined)?.items ?? []).slice().sort((a, b) => b.at.localeCompare(a.at));
+    return this.backups;
+  }
+
+  private hasRealData(): boolean {
+    const s = this.state;
+    return s.isSample === false && (s.invoices.length > 0 || (s.tasks?.length ?? 0) > 0 || (s.claims?.length ?? 0) > 0 || (s.checklists?.length ?? 0) > 0);
+  }
+
+  /** 建立一份備份；沒有資料（或只有範例資料）時不備份，回傳 null。 */
+  async createBackup(reason: BackupReason): Promise<BackupEntry | null> {
+    if (!this.backupsAvailable() || !this.hasRealData()) return null;
+    const text = super.exportBackup();
+    const up = await this.backupStore!.upload(new Blob([text], { type: 'application/json' }));
+    const entry: BackupEntry = { id: up.id, at: new Date().toISOString(), reason, invoices: this.state.invoices.length, tasks: this.state.tasks?.length ?? 0, claims: this.state.claims?.length ?? 0, sizeBytes: up.sizeBytes };
+    const all = [entry, ...(await this.listBackups())];
+    const keep = all.slice(0, BACKUP_KEEP);
+    await this.db.doc('meta/backups').set({ items: keep });
+    this.backups = keep;
+    for (const old of all.slice(BACKUP_KEEP)) await this.backupStore!.delete(old.id).catch(() => undefined);
+    return entry;
+  }
+
+  /** 距離上次備份滿 7 天就自動備份。回傳是否有建立。 */
+  async maybeAutoBackup(now: Date = new Date()): Promise<boolean> {
+    if (!this.backupsAvailable() || !this.hasRealData()) return false;
+    const [latest] = await this.listBackups();
+    if (latest && now.getTime() - Date.parse(latest.at) < BACKUP_EVERY_DAYS * 86_400_000) return false;
+    return (await this.createBackup('weekly')) !== null;
+  }
+
+  /** 還原某一份自動備份（還原前先把目前資料備份起來）。 */
+  async restoreBackup(id: string) {
+    this.require('admin');
+    if (!this.backupStore) throw new Error('Backups are not available here.');
+    const text = await this.backupStore.read(id);
+    await this.createBackup('before-restore').catch(() => null);
+    await super.importBackup(text);
+  }
+
+  private async safety(reason: BackupReason) {
+    // 安全備份失敗不應阻擋使用者的操作
+    await this.createBackup(reason).catch(() => null);
+  }
+
+  override async clearAllData() {
+    await this.safety('before-delete');
+    await super.clearAllData();
+  }
+
+  override async resetDemoData() {
+    if (this.ready) await this.safety('before-sample');
+    await super.resetDemoData();
+  }
+
+  override async importBackup(text: string) {
+    await this.safety('before-restore');
+    await super.importBackup(text);
+  }
+
+  override dataStatus() {
+    const base = super.dataStatus();
+    const latest = this.backups[0]?.at ?? null;
+    return { ...base, lastBackupAt: latest && (!base.lastBackupAt || latest > base.lastBackupAt) ? latest : base.lastBackupAt };
   }
 
   /** 失敗後重試寫入。 */
